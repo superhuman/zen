@@ -1,5 +1,5 @@
 <div class='ZenCommand'>
-  <input bind:value='input' ref:prompt on:blur='$closeCommand()' on:input='setSelected(0)' />
+  <input bind:value='input' ref:prompt on:blur='$closeCommand()' on: on:input='setSelected(0)' />
   <div ref:list class='suggestions'>
     {#each suggestions as suggestion, index}
       <div class="{index == selectedIndex ? 'selected' : ''}" title={altText(suggestion)} on:mousedown='takeAction(index)'>
@@ -109,7 +109,7 @@
   }
 
   function oncreate() {
-    this.refs.prompt.focus()
+    // this.refs.prompt.focus()
   }
 
   function onKeyDown(event) {

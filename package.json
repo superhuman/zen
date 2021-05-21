@@ -21,6 +21,7 @@
   },
   "homepage": "https://github.com/rogueg/zen#readme",
   "dependencies": {
+    "@types/styled-components": "^5.1.9",
     "aws-sdk": "^2.238.1",
     "baobab": "^2.6.1",
     "baobab-react": "^4.0.2",
