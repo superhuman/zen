@@ -1,5 +1,5 @@
 {
-  "name": "@rogueg/zen",
+  "name": "@superhuman/zen",
   "version": "0.3.1",
   "description": "Karma replacement that runs your tests in seconds",
   "main": "lib/cli.js",
