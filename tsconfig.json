@@ -4,6 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "node",
     "strict": true,
+    "esModuleInterop": true,
     "types": ["webpack-env"]
   }
 }

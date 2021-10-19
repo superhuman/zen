@@ -8,25 +8,28 @@ function needsUpdate(hash : string) : boolean {
 }
 
 type ModuleId = string | number
-function update() : Promise<ModuleId[]> {
-  let resolve : (value: ModuleId[]) => void
-  let reject : (error: unknown) => void
-  const promise = new Promise<ModuleId[]>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-
+async function update() : Promise<ModuleId[]> {
   // TODO make sure this works
-  import.meta.webpackHot?.check(true, (err, outdatedModules) => {
-    if (!err) {
-      location.reload()
-      resolve(outdatedModules)
-    } else {
-      reject(err)
-    }
-  })
+  if (import.meta.webpackHot) {
+    let resolve : (value: ModuleId[]) => void
+        let reject : (error: unknown) => void
+        const promise = new Promise<ModuleId[]>((res, rej) => {
+          resolve = res
+          reject = rej
+        })
 
-  return promise
+    import.meta.webpackHot.check(true, (err, outdatedModules) => {
+      if (!err) {
+        location.reload()
+        resolve(outdatedModules)
+      } else {
+        reject(err)
+      }
+    })
+    return promise
+  }
+
+  return []
 }
 
-export default { needsUpdate, update }
+(window as any).ZenWebpackClient = { needsUpdate, update }

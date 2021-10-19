@@ -41,6 +41,7 @@ function buildSimpleFile(file, outfile) {
     .catch(() => process.exit(1))
 }
 
+buildSimpleFile('lib/webpack-client.ts', 'webpack-client')
 buildSimpleFile('lib/latte.ts', 'latte')
 buildSimpleFile('lib/worker.js', 'worker')
 buildSimpleFile('lib/head.js', 'head')
