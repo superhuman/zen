@@ -1,5 +1,5 @@
 import path from 'path'
-import webpack, {Chunk} from 'webpack'
+import webpack, { Chunk } from 'webpack'
 import WebpackDevServer from 'webpack-dev-server'
 import type { Configuration, Compiler, Stats } from 'webpack'
 import type { Server } from 'connect'
@@ -31,11 +31,11 @@ type webpackStats = Stats & {
 type state = CompilingState | FailedState | webpackStats
 
 module.exports = class WebpackAdapter extends EventEmitter {
-  compiler : Compiler
+  compiler: Compiler
   compile?: state
   status?: state['status']
 
-  constructor(config : Configuration) {
+  constructor(config: Configuration) {
     super()
     this.addWebpackClient(config)
 
@@ -69,7 +69,7 @@ module.exports = class WebpackAdapter extends EventEmitter {
 
   // TODO this will most likely break once webpack is updated
   // bundle has been removed from the types at this point
-  addWebpackClient (config : any) {
+  addWebpackClient(config: any) {
     if (!config.entry.bundle) throw Error('Zen config requires an entry bundle')
 
     config.entry.bundle.push(path.join(__dirname, '../build/webpack-client.js'))
@@ -101,10 +101,10 @@ module.exports = class WebpackAdapter extends EventEmitter {
     server.use('/webpack', devServer.app)
   }
 
-  onStats (stats: Stats) {
+  onStats(stats: Stats) {
     const errors = (stats.compilation.errors || []).map((e) => {
-        return e.module ? `${e.module.id}: ${e.message}` : e.message
-      })
+      return e.module ? `${e.module.id}: ${e.message}` : e.message
+    })
 
     const state = Object.assign(stats, {
       files: Object.keys(stats.compilation.assets).map((name) => {
@@ -112,13 +112,15 @@ module.exports = class WebpackAdapter extends EventEmitter {
         return { path: `webpack/${name}`, body: source }
       }),
 
-      entrypoints : stats.compilation.entrypoints
-        .get('bundle')
-        ?.chunks.map((chunk : Chunk) => chunk.files.values().next().value) || [],
+      entrypoints:
+        stats.compilation.entrypoints
+          .get('bundle')
+          ?.chunks.map((chunk: Chunk) => chunk.files.values().next().value) ||
+        [],
 
       errors,
       // TODO error at some point should probably use failed like other webpack status reports
-      status: errors.length ? 'error'as const : 'done' as const
+      status: errors.length ? ('error' as const) : ('done' as const),
     })
 
     this.onStateChange(state)

@@ -75,7 +75,6 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
   // Without this, node limits our requests and slows down running on lambda
   https.globalAgent.maxSockets = 2000 // TODO multiplex over fewer connections
 
-
   Zen.indexHtml = function indexHtml(pageType, forS3) {
     let deps = ['build/latte.js']
     if (pageType == 'head') {

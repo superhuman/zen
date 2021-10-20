@@ -3,19 +3,19 @@ module.hot?.accept((err) => {
   if (err) location.reload()
 })
 
-function needsUpdate(hash : string) : boolean {
+function needsUpdate(hash: string): boolean {
   return !!hash && hash.indexOf(__webpack_hash__) == -1
 }
 
 type ModuleId = string | number
-async function update() : Promise<ModuleId[]> {
+async function update(): Promise<ModuleId[]> {
   if (module.hot) {
-    let resolve : (value: ModuleId[]) => void
-        let reject : (error: unknown) => void
-        const promise = new Promise<ModuleId[]>((res, rej) => {
-          resolve = res
-          reject = rej
-        })
+    let resolve: (value: ModuleId[]) => void
+    let reject: (error: unknown) => void
+    const promise = new Promise<ModuleId[]>((res, rej) => {
+      resolve = res
+      reject = rej
+    })
 
     module.hot.check(true, (err, outdatedModules) => {
       if (!err) {
