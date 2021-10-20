@@ -52,9 +52,7 @@ module.exports = class WebpackAdapter extends EventEmitter {
       })
     )
 
-    // TODO NamedModulesPlugin is added when hot reloading is enabled
-    // there is probably a nice way to type this...
-    config.plugins.push(new (webpack as any).NamedModulesPlugin())
+    config.plugins.push(new webpack.NamedModulesPlugin())
     this.compiler = webpack(config)
 
     this.compiler.hooks.invalid.tap('Zen', () =>
@@ -69,7 +67,8 @@ module.exports = class WebpackAdapter extends EventEmitter {
     this.compiler.hooks.done.tap('Zen', this.onStats.bind(this))
   }
 
-
+  // TODO this will most likely break once webpack is updated
+  // bundle has been removed from the types at this point
   addWebpackClient (config : any) {
     if (!config.entry.bundle) throw Error('Zen config requires an entry bundle')
 
@@ -82,8 +81,8 @@ module.exports = class WebpackAdapter extends EventEmitter {
         if (error) {
           return reject(error)
         } else if (stats?.hasErrors()) {
-          console.log("NOT SURE ABOUT THIS:", stats)
-          return reject(new Error((stats as any).errors))
+          const info = stats.toJson()
+          return reject(new Error(info.errors.join('\n')))
         }
 
         resolve(stats)
@@ -118,8 +117,8 @@ module.exports = class WebpackAdapter extends EventEmitter {
         ?.chunks.map((chunk : Chunk) => chunk.files.values().next().value) || [],
 
       errors,
-      // TODO figure out how to clean this up
-      status: (errors.length ? 'error' : 'done') as 'error' | 'done'
+      // TODO error at some point should probably use failed like other webpack status reports
+      status: errors.length ? 'error'as const : 'done' as const
     })
 
     this.onStateChange(state)

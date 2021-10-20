@@ -1,4 +1,4 @@
-import.meta.webpackHot?.accept((err) => {
+module.hot?.accept((err) => {
   // TODO I think this might be the source of refresh looping
   if (err) location.reload()
 })
@@ -9,8 +9,7 @@ function needsUpdate(hash : string) : boolean {
 
 type ModuleId = string | number
 async function update() : Promise<ModuleId[]> {
-  // TODO make sure this works
-  if (import.meta.webpackHot) {
+  if (module.hot) {
     let resolve : (value: ModuleId[]) => void
         let reject : (error: unknown) => void
         const promise = new Promise<ModuleId[]>((res, rej) => {
@@ -18,7 +17,7 @@ async function update() : Promise<ModuleId[]> {
           reject = rej
         })
 
-    import.meta.webpackHot.check(true, (err, outdatedModules) => {
+    module.hot.check(true, (err, outdatedModules) => {
       if (!err) {
         location.reload()
         resolve(outdatedModules)
@@ -32,4 +31,15 @@ async function update() : Promise<ModuleId[]> {
   return []
 }
 
-(window as any).ZenWebpackClient = { needsUpdate, update }
+declare global {
+  interface Window {
+    ZenWebpackClient: {
+      needsUpdate: typeof needsUpdate
+      update: typeof update
+    }
+  }
+}
+
+window.ZenWebpackClient = { needsUpdate, update }
+
+export default {}
