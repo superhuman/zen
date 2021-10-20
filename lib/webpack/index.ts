@@ -34,7 +34,6 @@ module.exports = class WebpackAdapter extends EventEmitter {
   compiler: Compiler
   compile?: state
   status?: state['status']
-  ansiConverter = new Convert()
 
   constructor(config: Configuration) {
     super()
