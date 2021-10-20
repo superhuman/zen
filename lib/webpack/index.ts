@@ -12,7 +12,7 @@ type CompilingState = {
 }
 
 type FailedState = {
-  status: 'failed'
+  status: 'error'
   errors: Error[]
 }
 
@@ -34,6 +34,7 @@ module.exports = class WebpackAdapter extends EventEmitter {
   compiler: Compiler
   compile?: state
   status?: state['status']
+  ansiConverter = new Convert()
 
   constructor(config: Configuration) {
     super()
@@ -62,7 +63,7 @@ module.exports = class WebpackAdapter extends EventEmitter {
       this.onStateChange({ status: 'compiling' })
     )
     this.compiler.hooks.failed.tap('Zen', (error: Error) =>
-      this.onStateChange({ status: 'failed', errors: [error] })
+      this.onStateChange({ status: 'error', errors: [error] })
     )
     this.compiler.hooks.done.tap('Zen', this.onStats.bind(this))
   }
@@ -119,7 +120,6 @@ module.exports = class WebpackAdapter extends EventEmitter {
         [],
 
       errors,
-      // TODO error at some point should probably use failed like other webpack status reports
       status: errors.length ? ('error' as const) : ('done' as const),
     })
 

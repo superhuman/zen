@@ -1,5 +1,6 @@
 module.hot?.accept((err) => {
   // TODO I think this might be the source of refresh looping
+  console.log("LOOPING")
   if (err) location.reload()
 })
 
@@ -33,7 +34,8 @@ async function update(): Promise<ModuleId[]> {
 
 declare global {
   interface Window {
-    ZenWebpackClient: {
+    // While webpack is building or in an error state this code may not run and set ZenWebpackClient
+    ZenWebpackClient?: {
       needsUpdate: typeof needsUpdate
       update: typeof update
     }
