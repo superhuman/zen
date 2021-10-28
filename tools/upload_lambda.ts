@@ -25,14 +25,18 @@ const s3 = new AWS.S3({ params: { Bucket: assetBucket } })
 
 // Create a the zip file
 const zip = new AdmZip()
-esbuild.buildSync({
-  entryPoints: [path.join(__dirname, '../lib/lambda.js'), path.join(__dirname, '../lib/chrome.js')],
-  platform: 'node',
-  bundle: true,
-  outdir: path.join(__dirname, '../build/lambda_code')
+const files = ['lambda', 'chrome']
+files.forEach(file => {
+  esbuild.buildSync({
+    entryPoints: [path.join(__dirname, `../lib/${file}.js`)],
+    platform: 'node',
+    bundle: file !== 'lambda',
+    outfile: path.join(__dirname, '../build/lambda_code', file + '.js')
+  })
+  zip.addLocalFile(path.join(__dirname, `../build/lambda_code/${file}.js`))
 })
-zip.addLocalFile(path.join(__dirname, '../build/lambda_code/lambda.js'))
-zip.addLocalFile(path.join(__dirname, '../build/lambda_code/chrome.js'))
+
+zip.writeZip(path.join(__dirname, '../build/lambda_code/lambda-code.zip'))
 
 // Send the zip up to S3
 const key = 'lambda-code.zip'
