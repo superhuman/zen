@@ -220,6 +220,7 @@ async function run(zen: Zen, opts: CLIOptions) {
     )
     process.exit(failCount ? 1 : 0)
   } catch (e) {
+    console.error(e)
     process.exit(1)
   }
 }
