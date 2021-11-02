@@ -10,7 +10,7 @@
     "build": "node ./build.js",
     "start": "node ./build.js -w",
     "prepare": "npm run build",
-    "upload-lambda-code": "ts-node ./tools/upload_lambda.ts"
+    "tools:upload-lambda": "ts-node ./tools/upload_lambda.ts"
   },
   "repository": {
     "type": "git",

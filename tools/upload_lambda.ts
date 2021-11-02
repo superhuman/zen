@@ -3,6 +3,33 @@ const AdmZip = require('adm-zip')
 const path = require('path')
 const esbuild = require('esbuild')
 
+// Create a the zip file
+const zip = new AdmZip()
+const files = ['lambda', 'chrome']
+files.forEach(file => {
+  // TODO make this use partial esbuild config
+  let bundleConfig : any = {
+    bundle: false
+  }
+  if (file !== 'lambda') {
+    bundleConfig = {
+      bundle: true,
+      // These are in the lambda layer we use and do not need to be bundled
+      external: ['chrome-aws-lambda', 'puppeteer-core']
+    }
+  }
+  esbuild.buildSync({
+    entryPoints: [path.join(__dirname, `../lib/${file}.js`)],
+    platform: 'node',
+    outfile: path.join(__dirname, '../build/lambda_code', file + '.js'),
+    ...bundleConfig
+  })
+  zip.addLocalFile(path.join(__dirname, `../build/lambda_code/${file}.js`))
+})
+
+zip.writeZip(path.join(__dirname, '../build/lambda_code/lambda-code.zip'))
+
+
 const assetBucket = process.env.ASSET_BUCKET
 const secretAccessKey = process.env.SECRET_ACCESS_KEY
 const accessKeyId = process.env.ACCESS_KEY_ID
@@ -22,21 +49,6 @@ AWS.config.update({
   // s3CacheVersion: 1
 })
 const s3 = new AWS.S3({ params: { Bucket: assetBucket } })
-
-// Create a the zip file
-const zip = new AdmZip()
-const files = ['lambda', 'chrome']
-files.forEach(file => {
-  esbuild.buildSync({
-    entryPoints: [path.join(__dirname, `../lib/${file}.js`)],
-    platform: 'node',
-    bundle: file !== 'lambda',
-    outfile: path.join(__dirname, '../build/lambda_code', file + '.js')
-  })
-  zip.addLocalFile(path.join(__dirname, `../build/lambda_code/${file}.js`))
-})
-
-zip.writeZip(path.join(__dirname, '../build/lambda_code/lambda-code.zip'))
 
 // Send the zip up to S3
 const key = 'lambda-code.zip'
