@@ -56,8 +56,8 @@ const body = zip.toBuffer()
 const contentType = 'application/zip, application/octet-stream'
 s3.upload({ Key: key, Body: body, ContentType: contentType } as any)
   .promise()
-  .then((result: unknown) => {
-    console.log('Upload finished!', result)
+  .then(() => {
+    console.log('Upload finished!')
   })
   .catch((e: unknown) => {
     console.error(e)
