@@ -197,12 +197,12 @@ Resources:
     Type: AWS::ApiGateway::Method
     DependsOn: RouteRequest
     Properties:
-      HttpMethod: ANY
+      HttpMethod: GET
       AuthorizationType: None
       RestApiId: !Ref GatewayApi
       ResourceId: !Ref GatewayResource
       Integration:
-        IntegrationHttpMethod: POST
+        IntegrationHttpMethod: GET
         Type: AWS_PROXY
         Uri: !Sub
           - 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lArn}/invocations'
