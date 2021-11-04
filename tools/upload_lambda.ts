@@ -43,10 +43,6 @@ AWS.config.update({
   secretAccessKey,
   accessKeyId,
   region: 'us-west-1',
-  apigateway: {
-    endpoint: 'https://14lcmc9k91.execute-api.us-west-1.amazonaws.com/pub',
-  },
-  // s3CacheVersion: 1
 })
 const s3 = new AWS.S3({ params: { Bucket: assetBucket } })
 
