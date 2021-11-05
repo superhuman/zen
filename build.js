@@ -25,7 +25,7 @@ esbuild
     platform: 'node',
     plugins: [nodeExternalsPlugin()],
     watch,
-    external: ['chrome-aws-lambda', 'puppeteer-core']
+    external: ['chrome-aws-lambda', 'puppeteer-core'],
   })
   .catch(() => process.exit(1))
 
