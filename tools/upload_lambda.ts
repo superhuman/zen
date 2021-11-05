@@ -15,7 +15,7 @@ files.forEach(file => {
     bundleConfig = {
       bundle: true,
       // These are in the lambda layer we use and do not need to be bundled
-      external: ['chrome-aws-lambda', 'puppeteer-core']
+      external: ['chrome-aws-lambda', 'puppeteer-core', 'aws-sdk']
     }
   }
   esbuild.buildSync({

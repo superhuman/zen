@@ -35,7 +35,7 @@
     "aws-sdk": "^2.238.1",
     "btoa": "^1.2.1",
     "chrome-launcher": "^0.10.2",
-    "chrome-remote-interface": "^0.27.1",
+    "chrome-remote-interface": "^0.28.1",
     "connect": "^3.6.1",
     "fuzzysort": "^1.1.4",
     "klaw": "^2.1.1",
