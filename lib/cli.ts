@@ -2,8 +2,8 @@
 
 import Server from './server'
 import initZen, { Zen } from './index'
-import yargs, { fail } from 'yargs'
-import * as Util from './util.js'
+import yargs from 'yargs'
+import Util from './util.js'
 import * as Profiler from './profiler'
 
 type testFailure = {
@@ -211,7 +211,7 @@ async function run(zen: Zen, opts: CLIOptions) {
       }
     }
 
-    if (opts.logging) Profiler.logBatch(metrics)
+    if (opts.logging) await Profiler.logBatch(zen, metrics)
     console.log(`Took ${Date.now() - t0}ms`)
     console.log(
       `${failCount ? '😢' : '🎉'} ${failCount} failed test${

@@ -1,6 +1,6 @@
 import * as path from 'path'
 import * as https from 'https'
-import * as Util from './util'
+import Util from './util'
 import * as AWS from 'aws-sdk'
 import S3Sync from './s3-sync'
 import Journal from './journal'
