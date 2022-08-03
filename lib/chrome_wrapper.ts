@@ -1,7 +1,63 @@
-import Puppeteer from 'puppeteer'
-import { string } from 'yargs'
+import Puppeteer from 'puppeteer-core'
+import { S3 } from 'aws-sdk'
 
-const chromeFlags = ['--headless', '--disable-gpu']
+const localChromeFlags = ['--headless', '--disable-gpu']
+const lambdaChromeFlags = [
+  '--disable-background-timer-throttling',
+  '--disable-breakpad',
+  '--disable-extensions',
+  '--disable-client-side-phishing-detection',
+  '--disable-cloud-import',
+  '--disable-default-apps',
+  '--disable-popup-blocking',
+  '--disable-dev-shm-usage',
+  '--disable-gesture-typing',
+  '--disable-print-preview',
+  '--disable-prompt-on-repost',
+  '--disable-hang-monitor',
+  '--disable-infobars',
+  '--disable-notifications',
+  '--disable-offer-store-unmasked-wallet-cards',
+  '--disable-offer-upload-credit-cards',
+  '--disable-setuid-sandbox',
+  '--disable-speech-api',
+  '--disable-sync',
+  '--disable-tab-for-desktop-share',
+  '--disable-translate',
+  '--disable-voice-input',
+  '--disable-wake-on-wifi',
+  '--enable-async-dns',
+  '--enable-simple-cache-backend',
+  '--enable-tcp-fast-open',
+  '--hide-scrollbars',
+  '--media-cache-size=33554432',
+  '--metrics-recording-only',
+  '--mute-audio',
+  '--no-default-browser-check',
+  '--no-first-run',
+  '--no-pings',
+  '--no-sandbox',
+  '--no-zygote',
+  '--password-store=basic',
+  '--prerender-from-omnibox=disabled',
+  '--use-mock-keychain',
+  '--memory-pressure-off',
+  '--enable-webgl',
+  '--ignore-gpu-blacklist',
+  '--use-gl=swiftshader',
+  '--headless',
+  '--single-process',
+  '--remote-debugging-port=9222',
+  `--window-size=800,600`,
+  '--user-data-dir=/tmp/chromeUserData',
+  '--enable-logging',
+  '--log-level=0',
+  '--v=1',
+  '--disable-web-security', // TODO figure out why S3 fetch requests are blocked, then remove this
+  // The default referrer policy was changed in chrome 85, this reverts
+  // it to the way it worked before https://www.chromestatus.com/feature/6251880185331712
+  '--force-legacy-default-referrer-policy',
+]
 
 type WindowSize = {
   width: number
@@ -24,6 +80,11 @@ type Test = {
   testName: string
   logs: { console: string }
 }
+type FileManifest = {
+  index: string
+  fileMap: Record<string, undefined | string>
+  assetUrl: string
+}
 
 class ChromeTab {
   codeHash?: string
@@ -37,15 +98,20 @@ class ChromeTab {
     private browser: Puppeteer.Browser,
     private page: Puppeteer.Page,
     private id: string = 'Dev',
-    config: Partial<ChromeTabConfig>
+    config: Partial<ChromeTabConfig>,
+    private manifest?: FileManifest,
+    private s3?: S3
   ) {
     this.config = { skipHotReload: false, failOnExceptions: false, ...config }
     this.state = 'starting'
     this.timeout = setTimeout(this.onTimeout, 10_000)
     this.requestMap = {}
-
-    this.page.on('console', async (message) =>
+    this.page.setRequestInterception(true)
+    this.page.on('request', this.onRequestPaused)
+    this.page.on('console', async (message) => {
+      console.log(message)
       this.onMessageAdded(message.text())
+    }
     )
     this.page.on('error', (error) => {
       this.onExceptionThrown(error)
@@ -294,91 +360,74 @@ class ChromeTab {
     } else if (this.state == 'hotReload') this.reload()
   }
 
-  // TODO this is needed for remote to work properly
-  // networkLogging() {
-  //   this.requestMap = {}
-  //   this.cdp.Network.requestWillBeSent(({ requestId, request }) => {
-  //     this.requestMap[requestId] = request.url
-  //   })
 
-  //   this.cdp.Network.loadingFailed(({ requestId }) => {
-  //     console.log('Request failed', this.requestMap[requestId])
-  //     delete this.requestMap[requestId]
-  //   })
+  onRequestPaused = async (request: Puppeteer.HTTPRequest) => {
+    const gatewayUrl = process.env.GATEWAY_URL
+    const requestUrl = request.url()
+    const isToGateway = gatewayUrl && requestUrl.indexOf(gatewayUrl) >= 0
 
-  //   this.cdp.Network.loadingFinished(({ requestId }) => {
-  //     delete this.requestMap[requestId]
-  //   })
-  // }
+    const defaultReturn = async () => {
+      try {
+        return request.continue()
+      } catch (error) {
+        console.error('Non-fatal error from cdp.Fetch.continueRequest', error)
+      }
+    }
 
-  // async onRequestPaused({ requestId, request }) {
-  //   let gatewayUrl = process.env.GATEWAY_URL
-  //   let isToGateway = gatewayUrl && request.url.indexOf(gatewayUrl) >= 0
-  //   if (!this.manifest || !isToGateway) {
-  //     return this.cdp.Fetch.continueRequest({ requestId })
-  //         .catch(err => { console.error('Non-fatal error from cdp.Fetch.continueRequest', err) })
-  //   }
+    if (!this.manifest || !isToGateway) {
+      return defaultReturn()
+    }
 
-  //   let path = decodeURIComponent(request.url.replace(`${gatewayUrl}/`, ''))
-  //   if (path.match(/^index\.html/)) {
-  //     console.log('sending index')
-  //     let responseHeaders = [{ name: 'Content-Type', value: 'text/html' }]
-  //     let body = Buffer.from(this.manifest.index, 'binary').toString('base64')
-  //     return this.cdp.Fetch.fulfillRequest({
-  //       requestId,
-  //       responseCode: 200,
-  //       responseHeaders,
-  //       body,
-  //     })
-  //   }
+    const path = decodeURIComponent(requestUrl.replace(`${gatewayUrl}/`, ''))
+    if (path.match(/^index\.html/)) {
+      return request.respond({
+        status: 200,
+        contentType: 'text/html',
+        body: this.manifest.index,
+      })
+    }
 
-  //   let key = this.manifest.fileMap[path]
-  //   if (key) {
-  //     try {
-  //       let url = `${this.manifest.assetUrl}/${key}`
-  //       console.log(`${path} redirected to ${url}`)
-  //       if (!this.s3) throw new Error('s3 not defined')
+    const key = this.manifest.fileMap[path]
+    if (key) {
+      try {
+        const url = `${this.manifest.assetUrl}/${key}`
+        console.log(`${path} redirected to ${url}`)
+        if (!this.s3) throw new Error('s3 not defined')
+        if (!process.env.ASSET_BUCKET)
+          throw new Error('ASSET_BUCKET is not defined')
 
-  //       const response = await this.s3
-  //         .getObject({
-  //           Bucket: process.env.ASSET_BUCKET,
-  //           Key: key,
-  //         })
-  //         .promise()
-  //       const responseHeaders = [
-  //         { name: 'Content-Type', value: response.ContentType },
-  //       ]
-  //       const body = response.Body.toString('base64')
+        const response = await this.s3
+          .getObject({
+            Bucket: process.env.ASSET_BUCKET,
+            Key: key,
+          })
+          .promise()
+        const body = response.Body?.toString()
 
-  //       await this.cdp.Fetch.fulfillRequest({
-  //         requestId,
-  //         responseCode: 200,
-  //         body,
-  //         responseHeaders,
-  //       })
-  //     } catch (e) {
-  //       // There is a chance for a redirect or new tab while this s3 request is going through
-  //       // if we try to fulfill a request that has been canceled chrome gets really angry
-  //       console.error(e)
-  //     }
-  //   } else {
-  //     console.log(`${path} missing from manifest`)
-  //     let responseHeaders = [{ name: 'Content-Type', value: 'text/plain' }]
-  //     let body = Buffer.from('Missing from manifest', 'binary').toString(
-  //       'base64'
-  //     )
-  //     this.cdp.Fetch.fulfillRequest({
-  //       requestId,
-  //       responseCode: 404,
-  //       responseHeaders,
-  //       body,
-  //     })
-  //   }
-  // }
+        await request.respond({
+          status: 200,
+          contentType: response.ContentType,
+          body
+        })
+      } catch (e) {
+        // There is a chance for a redirect or new tab while this s3 request is going through
+        // if we try to fulfill a request that has been canceled chrome gets really angry
+        console.error(e)
+      }
+    } else {
+      console.log(`${path} missing from manifest`)
+      return request.respond({
+        status: 404,
+        body: 'Missing from manifest',
+        headers: { 'Content-Type': 'text/plain' },
+      })
+    }
+  }
 }
 
 export default class ChromeWrapper {
   browser?: Promise<Puppeteer.Browser>
+  s3?: S3
 
   async launchLocal({
     port,
@@ -387,13 +436,30 @@ export default class ChromeWrapper {
     port: number
     windowSize: WindowSize
   }): Promise<void> {
-    console.log('LAUNCHING 123')
     try {
       this.browser = Puppeteer.launch({
+        // TODO this should not use macos as the default, probably install for local build
+        executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
         debuggingPort: port,
         headless: true,
-        args: [...chromeFlags, `--window-size=${width},${height}`],
+        args: [...localChromeFlags, `--window-size=${width},${height}`],
       })
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  async launchLambda() : Promise<Puppeteer.Browser | undefined> {
+    try {
+      this.s3 = new S3({ params: { Bucket: process.env.ASSET_BUCKET }})
+      const executablePath = await require('chrome-aws-lambda').executablePath
+      this.browser = Puppeteer.launch({
+        debuggingPort: 9222,
+        executablePath,
+        env: { ...process.env, TZ: 'America/New_York' },
+        args: lambdaChromeFlags
+      })
+      return await this.browser
     } catch (e) {
       console.error(e)
     }
@@ -402,14 +468,24 @@ export default class ChromeWrapper {
   async openTab(
     url: string,
     id: string,
-    config: ChromeTabConfig
+    config: ChromeTabConfig,
+    manifest?: FileManifest
   ): Promise<ChromeTab> {
     if (!this.browser) throw new Error('Browser not setup')
 
     const browser = await this.browser
     const page = await browser.newPage()
-    await page.goto(url)
+    const tab = new ChromeTab(browser, page, id, config, manifest, this.s3)
 
-    return new ChromeTab(browser, page, id, config)
+    // TODO clean up order, right now it makes tab before goto to make the url stuff work properly
+    await page.goto(url)
+    return tab
+  }
+  
+  async kill () : Promise<void> {
+    if (!this.browser) return
+    const browser = await this.browser
+      
+    return browser.close()
   }
 }
