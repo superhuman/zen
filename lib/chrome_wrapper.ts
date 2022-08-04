@@ -445,8 +445,6 @@ export default class ChromeWrapper {
       // When running locally, just use puppeteer because it bundles chromium with it
       const Puppeteer = require('puppeteer')
       this.browser = Puppeteer.launch({
-        // TODO this should not use macos as the default, probably install for local build
-        executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
         debuggingPort: port,
         headless: true,
         args: [...localChromeFlags, `--window-size=${width},${height}`],
@@ -474,13 +472,13 @@ export default class ChromeWrapper {
 
   async launchLambda() : Promise<Puppeteer.Browser | undefined> {
     try {
-      this.s3 = new S3({ params: { Bucket: process.env.ASSET_BUCKET }})
+      this.s3 = new S3({ params: { Bucket: process.env.ASSET_BUCKET } })
       const executablePath = await require('chrome-aws-lambda').executablePath
       this.browser = Puppeteer.launch({
         debuggingPort: 9222,
         executablePath,
         env: { ...process.env, TZ: 'America/New_York' },
-        args: lambdaChromeFlags
+        args: lambdaChromeFlags,
       })
       return await this.browser
     } catch (e) {
