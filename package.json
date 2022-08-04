@@ -39,6 +39,7 @@
     "klaw": "^2.1.1",
     "mime-types": "^2.1.17",
     "node-fetch": "^2.3.0",
+    "puppeteer": "^16.0.0",
     "puppeteer-core": "^15.5.0",
     "serve-static": "^1.12.2",
     "sugar": "^2.0.4",

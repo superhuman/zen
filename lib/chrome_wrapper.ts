@@ -3,6 +3,14 @@ import { S3 } from 'aws-sdk'
 
 const localChromeFlags = ['--headless', '--disable-gpu']
 const lambdaChromeFlags = [
+  '--autoplay-policy=user-gesture-required',
+  '--disable-background-networking',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-component-update',
+  '--disable-domain-reliability',
+  '--disable-features=AudioServiceOutOfProcess',
+  '--disable-ipc-flooding-protection',
+  '--disable-renderer-backgrounding',
   '--disable-background-timer-throttling',
   '--disable-breakpad',
   '--disable-extensions',
@@ -111,16 +119,14 @@ class ChromeTab {
     this.page.on('console', async (message) => {
       console.log(message)
       this.onMessageAdded(message.text())
-    }
-    )
+    })
     this.page.on('error', (error) => {
       this.onExceptionThrown(error)
     })
   }
 
   async resizeWindow({ width, height }: { width: number; height: number }) {
-    // TODO make this work
-    console.log('IMPLEMENT RESIZE WINDOW', width, height)
+    return this.page.setViewport({ width, height })
   }
 
   disconnect() {
@@ -360,7 +366,6 @@ class ChromeTab {
     } else if (this.state == 'hotReload') this.reload()
   }
 
-
   onRequestPaused = async (request: Puppeteer.HTTPRequest) => {
     const gatewayUrl = process.env.GATEWAY_URL
     const requestUrl = request.url()
@@ -407,7 +412,7 @@ class ChromeTab {
         await request.respond({
           status: 200,
           contentType: response.ContentType,
-          body
+          body,
         })
       } catch (e) {
         // There is a chance for a redirect or new tab while this s3 request is going through
@@ -437,9 +442,9 @@ export default class ChromeWrapper {
     windowSize: WindowSize
   }): Promise<void> {
     try {
+      // When running locally, just use puppeteer because it bundles chromium with it
+      const Puppeteer = require('puppeteer')
       this.browser = Puppeteer.launch({
-        // TODO this should not use macos as the default, probably install for local build
-        executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
         debuggingPort: port,
         headless: true,
         args: [...localChromeFlags, `--window-size=${width},${height}`],
@@ -449,15 +454,15 @@ export default class ChromeWrapper {
     }
   }
 
-  async launchLambda() : Promise<Puppeteer.Browser | undefined> {
+  async launchLambda(): Promise<Puppeteer.Browser | undefined> {
     try {
-      this.s3 = new S3({ params: { Bucket: process.env.ASSET_BUCKET }})
+      this.s3 = new S3({ params: { Bucket: process.env.ASSET_BUCKET } })
       const executablePath = await require('chrome-aws-lambda').executablePath
       this.browser = Puppeteer.launch({
         debuggingPort: 9222,
         executablePath,
         env: { ...process.env, TZ: 'America/New_York' },
-        args: lambdaChromeFlags
+        args: lambdaChromeFlags,
       })
       return await this.browser
     } catch (e) {
@@ -481,11 +486,11 @@ export default class ChromeWrapper {
     await page.goto(url)
     return tab
   }
-  
-  async kill () : Promise<void> {
+
+  async kill(): Promise<void> {
     if (!this.browser) return
     const browser = await this.browser
-      
+
     return browser.close()
   }
 }
