@@ -1,7 +1,7 @@
-const path = require('path')
-const util = require('./util')
+import path from 'path'
+import util from './util'
 
-module.exports = class Journal {
+export default class Journal {
   constructor() {
     this.path = path.join(Zen.config.tmpDir, 'journal.json')
     this.state = JSON.parse(util.readFile(this.path) || '{}')

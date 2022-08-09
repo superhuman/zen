@@ -2,7 +2,7 @@
 
 import Server from './server'
 import initZen, { Zen } from './index'
-import yargs, { fail } from 'yargs'
+import yargs from 'yargs'
 import * as Util from './util.js'
 import * as Profiler from './profiler'
 
