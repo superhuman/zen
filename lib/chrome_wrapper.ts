@@ -1,6 +1,15 @@
 import Puppeteer from 'puppeteer-core'
 import { S3 } from 'aws-sdk'
 
+export type TestResult = {
+  error?: string
+  time: number
+  fullName: string
+  logStream?: string
+  attempts: number
+  log?: log
+}
+
 const localChromeFlags = ['--headless', '--disable-gpu']
 const lambdaChromeFlags = [
   '--autoplay-policy=user-gesture-required',
@@ -86,7 +95,9 @@ type ChromeTabState =
 type log = { console: string[] }
 type Test = {
   testName: string
-  logs: { console: string }
+  logs?: { console: string }
+  batch?: Test[]
+  runId: string
 }
 type FileManifest = {
   index: string
@@ -145,13 +156,13 @@ class ChromeTab {
     }
   }
 
-  resolveWork?: (value: unknown) => void
-  setTest(test: Test) {
+  resolveWork?: (value: TestResult | null) => void
+  setTest(test: Test): Promise<TestResult | null> {
     if (this.test) {
       this.resolveWork?.(null)
     }
 
-    const promise = new Promise((res) => {
+    const promise = new Promise<TestResult | null>((res) => {
       this.resolveWork = res
     })
     this.test = test
@@ -318,21 +329,22 @@ class ChromeTab {
     error?: string
     stack?: string
     fullName: string
+    attempts: number
     log?: log
   }) {
+    if (!this.startAt) {
+      return this.resolveWork?.(null)
+    }
     const message = {
       ...rawMessage,
-      time: this.startAt && new Date().getTime() - this.startAt.getTime(),
+      time: new Date().getTime() - this.startAt.getTime(),
     }
 
     if (!this.test?.logs || !this.test.logs.console) {
       delete message.log
     }
 
-    if (this.resolveWork) {
-      this.resolveWork(message)
-    }
-
+    this.resolveWork?.(message)
     this.resolveWork = undefined
     this.test = undefined
   }
