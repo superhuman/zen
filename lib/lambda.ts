@@ -1,9 +1,9 @@
-import type ChromeWrapper from "./chrome_wrapper"
-import type { TestResult } from "./chrome_wrapper"
-import { Context } from 'aws-lambda';
+import type ChromeWrapper from './chrome_wrapper'
+import type { TestResult } from './chrome_wrapper'
+import { Context } from 'aws-lambda'
 import AWS from 'aws-sdk'
 // TODO test if this works
-let wrapper : ChromeWrapper // store chrome wrapper globally. In theory we could reuse this between runs
+let wrapper: ChromeWrapper // store chrome wrapper globally. In theory we could reuse this between runs
 
 type WorkTestOpts = {
   testNames: string[]
@@ -11,72 +11,97 @@ type WorkTestOpts = {
   runId: string
 }
 type WorkTestsResult = {
+  results: Record<string, TestResult[]>,
+  logStreamName: string
 }
-export const workTests = async (opts : WorkTestOpts, context : Context) : Promise<WorkTestsResult | unknown> => {
+export const workTests = async (
+  opts: WorkTestOpts,
+  context: Context
+): Promise<WorkTestsResult | unknown> => {
+  const { testNames: tests } = opts
   const remainingTime = context.getRemainingTimeInMillis()
+  const results = tests.reduce<Record<string, TestResult[]>>(
+    (acc, testName) => {
+      acc[testName] = []
+      return acc
+    },
+    {}
+  )
+  // So we can log lambda errors with the test that caused them
+  let activeTest
+  const getRemainingTests = () =>
+      tests.filter((test) => {
+        const testResults = results[test]
+        const lastRun = testResults[testResults.length - 1]
+        return !lastRun || lastRun.error
+      })
+
   try {
-    // TODO: the 1s buffer will help, most of the time but the extendRemoteTimeout may cause issues with this
-
-    // 5s to safely setup zen
-    const maxRunTime = remainingTime - 5_000
-    // 5s more off to have a safe 10s to run a final test
-    const cutoff = Date.now() + maxRunTime - 5_000
-    const cutoffTimeout = new Promise((res) => setTimeout(res, maxRunTime))
-    const results : TestResult[] = []
-    const runTests = async () => {
-      // Run all tests once, collecting results
-      console.log('Starting tests')
-      const remaining = opts.testNames.slice()
-      while (remaining.length > 0) {
-        const testOpts = { runId: opts.runId, testName: remaining.shift() as string }
-        const r = await tab.setTest(testOpts)
-        if (!r) continue
-
-        r.attempts = 1
-        results.push(r)
-      }
-
-      // Optionally deflake tests that failed. Attempt all failing tests the same number of times
-      // until we run out of time on this lambda worker, or reach our deflake limit.
-      // To maximize our chances, we'll reload the tab before each attempt.
-      let hasTimeRemaining = true
-      let attempts = 1
-      const deflakeLimit = opts.deflakeLimit || 1
-      while (
-        attempts < deflakeLimit &&
-        hasTimeRemaining &&
-        results.find((r) => r.error)
-      ) {
-        attempts++
-        for (const previousResult of results.filter((r) => r.error)) {
-          hasTimeRemaining = Date.now() + previousResult.time * 1.2 < cutoff
-          if (!hasTimeRemaining) break
-
-          tab.reload()
-          const result = await tab.setTest(
-            { runId: opts.runId, testName: previousResult.fullName }
-          )
-          if (!result) {
-            // incrememnt the attempts
-            results.splice(results.indexOf(previousResult), 1, { ...previousResult, attempts })
-            continue
+    const timeout = setTimeout(() => {
+      throw new Error("Lambda Timeout")
+    }, remainingTime - 5_000)
+    const runTestSet = async (tests: string[]) => {
+      for (const testName of tests) {
+        activeTest = testName
+        const testOpts = { runId: opts.runId, testName }
+        let r = await tab.setTest(testOpts)
+        if (!r) {
+          r = {
+            fullName: testName,
+            time: 0,
+            error: 'Test resolved without running!',
           }
-          result.attempts = attempts
-          results.splice(results.indexOf(previousResult), 1, result) // replace previous result
         }
+
+        results[testOpts.testName].push(r)
+      }
+    }
+    
+    const tab = await prepareChrome(opts)
+    const deflakeLimit = opts.deflakeLimit || 3
+    for (let attempt = 1; attempt <= deflakeLimit; attempt++) {
+      const remainingTests = getRemainingTests()
+      console.log("REMAINING TESTS", remainingTests)
+      if (remainingTests.length === 0) break
+
+      await runTestSet(remainingTests)
+    }
+
+    clearTimeout(timeout)
+    return {
+      results,
+      logStreamName: context.logStreamName,
+    }
+  } catch (e) {
+    if (e instanceof Error) {
+      const message = e.message
+      if (message === "Lambda Timeout" || message.includes("TimeoutError")) {
+        const remainingTests = getRemainingTests()
+        remainingTests.forEach(test => {
+          results[test].push({
+            error: message,
+            fullName: test,
+            time: 0
+          })
+        })
+      } else if (activeTest) {
+        results[activeTest].push({
+          error: e.message,
+          fullName: activeTest,
+          time: 0 // TODO figure out a good way to get time
+        })
+      } else {
+        console.log("UNKOWN ERROR")
+        console.error(e)
       }
     }
 
-    const tab = await prepareChrome(opts)
-    await Promise.race([cutoffTimeout, runTests()])
-
-    // Track the logStreamName, so it's easy to open the logs of a failed test
-    results.forEach((r) => (r.logStream = context.logStreamName))
-
-    wrapper.kill()
-    return results
-  } catch (e) {
-    return e
+    return {
+      results,
+      logStreamName: context.logStreamName,
+    }
+  } finally {
+    // wrapper.kill()
   }
 }
 

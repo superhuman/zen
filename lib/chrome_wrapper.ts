@@ -5,8 +5,6 @@ export type TestResult = {
   error?: string
   time: number
   fullName: string
-  logStream?: string
-  attempts: number
   log?: log
 }
 
@@ -329,7 +327,6 @@ class ChromeTab {
     error?: string
     stack?: string
     fullName: string
-    attempts: number
     log?: log
   }) {
     if (!this.startAt) {
