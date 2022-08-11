@@ -73,7 +73,26 @@ async function runTests(
           testNames: group.tests,
           sessionId: zen.config.sessionId,
         })
-        return response.filter((r: testFailure) => r.error || r.attempts > 1)
+        const logStreamName = response.logStreamName
+
+        // Map back to the old representation and fill in any tests that may have not run
+        const results = group.tests.map(test => {
+          const results = response.results[test] || []
+          const result = results.at(-1)
+
+          if (!result) {
+            console.log(test, response.results, results)
+            return { fullName: test, attempts: 0, error: "Failed to run on remote!", logStream: logStreamName }
+          } else {
+            return {
+              ...result,
+              logStream: logStreamName,
+              attempts: results.length
+            }
+          }
+        })
+
+        return results.filter((r: testFailure) => r.error || r.attempts > 1)
       } catch (e) {
         console.error(e)
         return group.tests.map((name: string) => {
