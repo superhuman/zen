@@ -100,8 +100,6 @@ export const workTests = async (
       results,
       logStreamName: context.logStreamName,
     }
-  } finally {
-    // wrapper.kill()
   }
 }
 
@@ -182,27 +180,27 @@ export const routeRequest = async (event) => {
   }
 }
 
-async function prepareChrome(opts) {
-  const ChromeWrapper = require('./chrome_wrapper').default
-  wrapper = new ChromeWrapper()
+async function prepareChrome({ sessionId }: { sessionId: string }) {
+  const manifest = await getManifest(sessionId)
+  if (!manifest) throw new Error(`Missing manifest for ${sessionId}`)
 
   // Start chrome and fetch the manifest in parallel
-  console.log('Starting chrome')
-  const manifest = await getManifest(opts.sessionId)
-  await wrapper.launchLambda()
-
-  // We require a manifest in lambda
-  if (!manifest) throw new Error(`Missing manifest for ${opts.sessionId}`)
-
+  if (!wrapper) {
+    console.log("Setting up Chrome")
+    const ChromeWrapper = require('./chrome_wrapper').default
+    wrapper = new ChromeWrapper()
+    await wrapper.launchLambda()
+  } else {
+    console.log("Chrome is already setup!")
+  }
+  
   console.log('Opening tab')
-  // TODO: this api is a bit jank
-  let tab = await wrapper.openTab(
+  return await wrapper.openTab(
     process.env.GATEWAY_URL + '/index.html',
-    null,
+    sessionId,
     {},
     manifest
   )
-  return tab
 }
 
 async function getManifest(sessionId) {

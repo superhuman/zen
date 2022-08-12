@@ -482,7 +482,7 @@ export default class ChromeWrapper {
   async openTab(
     url: string,
     id: string,
-    config: ChromeTabConfig,
+    config: Partial<ChromeTabConfig>,
     manifest?: FileManifest
   ): Promise<ChromeTab> {
     if (!this.browser) throw new Error('Browser not setup')
