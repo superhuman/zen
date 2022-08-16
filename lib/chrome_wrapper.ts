@@ -123,12 +123,15 @@ class ChromeTab {
     this.state = 'starting'
     this.timeout = setTimeout(this.onTimeout, 10_000)
     this.requestMap = {}
+    this.setupPage()
+  }
+  
+  setupPage () {
     this.page.setRequestInterception(true)
     this.page.on('request', this.onRequestPaused)
-    this.page.on('console', async (message) => {
-      console.log(message)
+    this.page.on('console', async (message) =>
       this.onMessageAdded(message.text())
-    })
+    )
     this.page.on('error', (error) => {
       this.onExceptionThrown(error)
     })
@@ -152,6 +155,23 @@ class ChromeTab {
     if (this.state === 'idle' || this.state === 'badCode') {
       this.reload()
     }
+  }
+  
+  async awaitLoad () {
+    let resolve : () => void
+    const handler = (message : Puppeteer.ConsoleMessage) => {
+      const text = message.text() 
+      if (text.startsWith('Zen.idle')) resolve()
+    }
+    const promise = new Promise((res, rej) => {
+      resolve = () => {
+        this.page.off('console', handler)
+        res(undefined) 
+      }
+    })
+    
+    this.page.on('console', handler)
+    return promise
   }
 
   resolveWork?: (value: TestResult | null) => void
@@ -187,7 +207,7 @@ class ChromeTab {
   }
 
   _evaluate(code: string) {
-    return this._retryOnClose(() => this.page.evaluate(code))
+    return this._retry(() => this.page.evaluate(code))
   }
 
   // Attempt to hot reload the latest code
@@ -208,8 +228,8 @@ class ChromeTab {
     this.startAt = new Date()
     this.timeout = setTimeout(this.onTimeout, 20_000)
 
-    await this._retryOnClose(() => this.page.focus('body'))
-    this.page.evaluate(`Zen.run(${JSON.stringify(this.test)})`)
+    await this._retry(() => this.page.focus('body'))
+    await this._evaluate(`Zen.run(${JSON.stringify(this.test)})`)
   }
 
   badCodeError?: string
@@ -252,14 +272,19 @@ class ChromeTab {
     else if (this.listRequest) this.listTests()
   }
 
-  async _retryOnClose<A>(cb: () => A): Promise<A | undefined> {
+  // Retries code that would be executed on the page if a couple common failure cases happen
+  async _retry<A>(cb: () => A): Promise<A | undefined> {
     try {
       return await cb()
     } catch (e) {
-      if (e instanceof Error && e.message.includes('Session closed')) {
+      if (!(e instanceof Error)) return 
+      if (e.message.includes('Session closed') || e.message.includes('Zen.run is not a function')) {
         const oldUrl = this.page.url()
         this.page = await this.browser.newPage()
-        await this.page.goto(oldUrl)
+        this.setupPage()
+
+        this.page.goto(oldUrl)
+        await this.awaitLoad()
         return await cb()
       }
     }
@@ -272,7 +297,7 @@ class ChromeTab {
     this.requestMap = {}
     console.log(`[${this.id}] reloading`)
     // TODO navigate to the correct url, in case the test has changed our location
-    return await this._retryOnClose(() => this.page.reload())
+    return await this._retry(() => this.page.reload())
   }
 
   onTimeout = () => {
