@@ -113,8 +113,8 @@ export function ensureDir(dir:string) : void {
   fs.existsSync(dir) || fs.mkdirSync(dir)
 }
 
-function isRetryableError (error : AWSError) {
-  if (error.code === 'TooManyRequestsException') {
+function isRetryableError (error : Error) {
+  if (error.message.includes('Rate Exceeded.')) {
     return true
   }
   
@@ -144,7 +144,7 @@ export async function invoke(name :string, args : unknown, retry = 3) : Promise<
     }
     return payload
   } catch (e) {
-    if (retry > 0 && e instanceof AWSError && isRetryableError(e)) {
+    if (retry > 0 && e instanceof Error && isRetryableError(e)) {
       // 10s is arbitrary but hopefully it gives time for things like rate-limiting to resolve
       await timeout(10_000)
       return invoke(name, args, retry - 1)
