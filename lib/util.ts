@@ -2,10 +2,12 @@ import connect from 'connect'
 import serveStatic from 'serve-static'
 import path from 'path'
 import fs from 'fs'
+// @ts-expect-error we depend on such and old version of svelte there is no @types...
 import svelte from 'svelte'
 import WebSocket from 'ws'
 import fetch from 'node-fetch'
 import type http from 'http'
+import { AWSError } from 'aws-sdk'
 
 export function serveWith404 (dir : string) : connect.Server {
   return connect()
@@ -54,6 +56,8 @@ export async function serveIcons(_req : http.IncomingMessage, res : http.ServerR
   await Promise.all(
     fs.readdirSync(root).map(async (fname) => {
       if (!fname.match(/([\w_-]+)\.svg$/)) return null
+      // TODO remove sugar
+      // @ts-expect-error using a sugar method
       const name : string = RegExp.$1.camelize()
       icons[name] = await readFileAsync(
         path.join(root, fname)
@@ -65,9 +69,9 @@ export async function serveIcons(_req : http.IncomingMessage, res : http.ServerR
   res.end(iconCache)
 }
 
-export function wsSend(ws : ws, obj : unknown) : void {
+export function wsSend(ws : WebSocket, obj : unknown) : void {
   if (!ws || ws.readyState != WebSocket.OPEN) return
-  ws.send(JSON.stringify(obj), (error : WebSocket.ErrorEvent) => {
+  ws.send(JSON.stringify(obj), (error : Error | undefined) => {
     if (error) console.error('Websocket error', error)
   })
 }
@@ -109,22 +113,43 @@ export function ensureDir(dir:string) : void {
   fs.existsSync(dir) || fs.mkdirSync(dir)
 }
 
-export async function invoke(name :string, args : unknown) : Promise<unknown> {
+function isRetryableError (error : AWSError) {
+  if (error.code === 'TooManyRequestsException') {
+    return true
+  }
+  
+  return false
+}
+
+function timeout (ms : number) : Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+export async function invoke(name :string, args : unknown, retry = 3) : Promise<unknown> {
   // @ts-expect-error Zen global is janky but I don't want to migrate it right now
   const lambda = Zen.lambda as AWS.Lambda
-  const result = await lambda
-    .invoke({ FunctionName: name, Payload: JSON.stringify(args) })
-    .promise()
+  try {
+    const result = await lambda
+      .invoke({ FunctionName: name, Payload: JSON.stringify(args) })
+      .promise()
 
-  if (result.StatusCode != 200) throw new Error(result)
+    if (result.StatusCode != 200 || !result.Payload) throw result
 
-  const payload = JSON.parse(result.Payload)
+    // @ts-expect-error This appears to work :shrug:, it is not worth fixing until real changes here
+    const payload = JSON.parse(result.Payload)
 
-  if (payload.errorMessage) {
-    const err = new Error(payload.errorMessage)
-    // err.stack = payload.stackTrace ? payload.stackTrace.join('\n') : err.stack
-    throw err
+    if (payload.errorMessage) {
+      const err = new Error(payload.errorMessage)
+      throw err
+    }
+    return payload
+  } catch (e) {
+    if (retry > 0 && e instanceof AWSError && isRetryableError(e)) {
+      // 10s is arbitrary but hopefully it gives time for things like rate-limiting to resolve
+      await timeout(10_000)
+      return invoke(name, args, retry - 1)
+    }
+
+    throw e
   }
-
-  return payload
 }
