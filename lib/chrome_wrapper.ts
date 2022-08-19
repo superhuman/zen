@@ -82,6 +82,7 @@ type WindowSize = {
 type ChromeTabConfig = {
   skipHotReload: boolean
   failOnExceptions: boolean
+  logging: boolean
 }
 type ChromeTabState =
   | 'starting'
@@ -119,7 +120,12 @@ class ChromeTab {
     private manifest?: FileManifest,
     private s3?: S3
   ) {
-    this.config = { skipHotReload: false, failOnExceptions: false, ...config }
+    this.config = {
+      skipHotReload: false,
+      failOnExceptions: false,
+      logging: false,
+      ...config,
+    }
     this.state = 'starting'
     this.timeout = setTimeout(this.onTimeout, 10_000)
     this.requestMap = {}
@@ -129,9 +135,10 @@ class ChromeTab {
   setupPage () {
     this.page.setRequestInterception(true)
     this.page.on('request', this.onRequestPaused)
-    this.page.on('console', async (message) =>
+    this.page.on('console', async (message) => {
+      if (this.config.logging) console.log('Log:', message.text())
       this.onMessageAdded(message.text())
-    )
+    })
     this.page.on('error', (error) => {
       this.onExceptionThrown(error)
     })
@@ -441,12 +448,12 @@ class ChromeTab {
             Key: key,
           })
           .promise()
-        const body = response.Body?.toString()
+        const body = response.Body as Buffer
 
         await request.respond({
           status: 200,
           contentType: response.ContentType,
-          body,
+          body
         })
       } catch (e) {
         // There is a chance for a redirect or new tab while this s3 request is going through

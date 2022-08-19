@@ -17,7 +17,7 @@ type WorkTestsResult = {
 export const workTests = async (
   opts: WorkTestOpts,
   context: Context
-): Promise<WorkTestsResult | unknown> => {
+): Promise<WorkTestsResult> => {
   const { testNames: tests } = opts
   const remainingTime = context.getRemainingTimeInMillis()
   const results = tests.reduce<Record<string, TestResult[]>>(
@@ -198,7 +198,7 @@ async function prepareChrome({ sessionId }: { sessionId: string }) {
   return await wrapper.openTab(
     process.env.GATEWAY_URL + '/index.html',
     sessionId,
-    {},
+    { logging: true },
     manifest
   )
 }
