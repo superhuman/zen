@@ -3,7 +3,7 @@
 import Server from './server'
 import initZen, { Zen } from './index'
 import yargs from 'yargs'
-import * as Util from './util.js'
+import { invoke } from './util.js'
 import * as Profiler from './profiler'
 
 type testFailure = {
@@ -68,7 +68,7 @@ async function runTests(
   const failedTests: testFailure[][] = await Promise.all(
     groups.map(async (group: { tests: string[] }): Promise<testFailure[]> => {
       try {
-        const response = await Util.invoke('zen-workTests-staging', {
+        const response = await invoke('zen-workTests-staging', {
           deflakeLimit: opts.maxAttempts,
           testNames: group.tests,
           sessionId: zen.config.sessionId,
@@ -178,7 +178,7 @@ async function run(zen: Zen, opts: CLIOptions) {
 
     t0 = Date.now()
     console.log('Getting test names')
-    let workingSet: string[] = await Util.invoke('zen-listTests', {
+    let workingSet: string[] = await invoke('zen-listTests', {
       sessionId: zen.config.sessionId,
     })
 
