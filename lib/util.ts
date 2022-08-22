@@ -9,7 +9,7 @@ import fetch from 'node-fetch'
 import type http from 'http'
 import { AWSError } from 'aws-sdk'
 
-export function serveWith404 (dir : string) : connect.Server {
+export function serveWith404(dir: string): connect.Server {
   return connect()
     .use(serveStatic(dir))
     .use((i, o) => {
@@ -18,7 +18,10 @@ export function serveWith404 (dir : string) : connect.Server {
     })
 }
 
-export function serveSvelte(req : http.IncomingMessage, res : http.ServerResponse) : void {
+export function serveSvelte(
+  req: http.IncomingMessage,
+  res: http.ServerResponse
+): void {
   if (!req.url) return
 
   let name = path.basename(req.url, '.js')
@@ -48,20 +51,21 @@ export function serveSvelte(req : http.IncomingMessage, res : http.ServerRespons
   )
 }
 
-let iconCache : string | null = null
-export async function serveIcons(_req : http.IncomingMessage, res : http.ServerResponse) : Promise<void> {
+let iconCache: string | null = null
+export async function serveIcons(
+  _req: http.IncomingMessage,
+  res: http.ServerResponse
+): Promise<void> {
   if (iconCache) return res.end(iconCache)
-  const icons : Record<string, string | undefined> = {}
+  const icons: Record<string, string | undefined> = {}
   const root = path.join(__dirname, '../assets')
   await Promise.all(
     fs.readdirSync(root).map(async (fname) => {
       if (!fname.match(/([\w_-]+)\.svg$/)) return null
       // TODO remove sugar
       // @ts-expect-error using a sugar method
-      const name : string = RegExp.$1.camelize()
-      icons[name] = await readFileAsync(
-        path.join(root, fname)
-      )
+      const name: string = RegExp.$1.camelize()
+      icons[name] = await readFileAsync(path.join(root, fname))
     })
   )
 
@@ -69,14 +73,14 @@ export async function serveIcons(_req : http.IncomingMessage, res : http.ServerR
   res.end(iconCache)
 }
 
-export function wsSend(ws : WebSocket, obj : unknown) : void {
+export function wsSend(ws: WebSocket, obj: unknown): void {
   if (!ws || ws.readyState != WebSocket.OPEN) return
-  ws.send(JSON.stringify(obj), (error : Error | undefined) => {
+  ws.send(JSON.stringify(obj), (error: Error | undefined) => {
     if (error) console.error('Websocket error', error)
   })
 }
 
-export  async function post (url : string, obj : unknown) : Promise<unknown> {
+export async function post(url: string, obj: unknown): Promise<unknown> {
   const resp = await fetch(url, { method: 'POST', body: JSON.stringify(obj) })
   const body = await resp.text()
 
@@ -87,45 +91,48 @@ export  async function post (url : string, obj : unknown) : Promise<unknown> {
   }
 }
 
-export function readFile (p : string, encoding : BufferEncoding = 'utf8') : string {
+export function readFile(p: string, encoding: BufferEncoding = 'utf8'): string {
   ensureDir(path.dirname(p))
   if (!fs.existsSync(p)) return ''
   return fs.readFileSync(p, encoding)
 }
 
-export async function readFileAsync(p : string, encoding : BufferEncoding = 'utf8') : Promise<string | undefined> {
+export async function readFileAsync(
+  p: string,
+  encoding: BufferEncoding = 'utf8'
+): Promise<string | undefined> {
   ensureDir(path.dirname(p))
   return new Promise((res) => {
     fs.readFile(p, encoding, (_err, data) => res(data))
   })
 }
 
-export async function writeFile(p : string, data = '') : Promise<void> {
+export async function writeFile(p: string, data = ''): Promise<void> {
   ensureDir(path.dirname(p))
   return new Promise((res) => {
     fs.writeFile(p, data, () => res(undefined))
   })
 }
 
-export function ensureDir(dir:string) : void {
+export function ensureDir(dir: string): void {
   const parent = path.dirname(dir)
   fs.existsSync(parent) || ensureDir(parent)
   fs.existsSync(dir) || fs.mkdirSync(dir)
 }
 
-function isRetryableError (error : Error) {
-  if (error.message.includes('Rate Exceeded.')) {
-    return true
-  }
-  
-  return false
+function isRetryableError(error: Error) {
+  return error.message.includes('Rate Exceeded.')
 }
 
-function timeout (ms : number) : Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+function timeout(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export async function invoke(name :string, args : unknown, retry = 3) : Promise<unknown> {
+export async function invoke(
+  name: string,
+  args: unknown,
+  retry = 3
+): Promise<unknown> {
   // @ts-expect-error Zen global is janky but I don't want to migrate it right now
   const lambda = Zen.lambda as AWS.Lambda
   try {
