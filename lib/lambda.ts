@@ -106,7 +106,6 @@ export const workTests = async (
 export async function listTests(opts): Promise<string[]> {
   let tab = await prepareChrome(opts)
   let names = await tab.getTestNames()
-  wrapper.kill()
   return names
 }
 
