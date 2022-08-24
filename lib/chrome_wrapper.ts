@@ -454,22 +454,6 @@ export default class ChromeWrapper {
     }
   }
 
-  async launchLambda(): Promise<Puppeteer.Browser | undefined> {
-    try {
-      this.s3 = new S3({ params: { Bucket: process.env.ASSET_BUCKET } })
-      const executablePath = await require('chrome-aws-lambda').executablePath
-      this.browser = Puppeteer.launch({
-        debuggingPort: 9222,
-        executablePath,
-        env: { ...process.env, TZ: 'America/New_York' },
-        args: lambdaChromeFlags,
-      })
-      return await this.browser
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
   async launchLambda() : Promise<Puppeteer.Browser | undefined> {
     try {
       this.s3 = new S3({ params: { Bucket: process.env.ASSET_BUCKET } })
