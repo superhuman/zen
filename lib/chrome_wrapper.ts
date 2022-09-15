@@ -1,6 +1,13 @@
 import Puppeteer from 'puppeteer-core'
 import { S3 } from 'aws-sdk'
 
+export type TestResult = {
+  error?: string
+  time: number
+  fullName: string
+  log?: log
+}
+
 const localChromeFlags = ['--headless', '--disable-gpu']
 const lambdaChromeFlags = [
   '--autoplay-policy=user-gesture-required',
@@ -75,6 +82,7 @@ type WindowSize = {
 type ChromeTabConfig = {
   skipHotReload: boolean
   failOnExceptions: boolean
+  logging: boolean
 }
 type ChromeTabState =
   | 'starting'
@@ -86,7 +94,9 @@ type ChromeTabState =
 type log = { console: string[] }
 type Test = {
   testName: string
-  logs: { console: string }
+  logs?: { console: string }
+  batch?: Test[]
+  runId: string
 }
 type FileManifest = {
   index: string
@@ -110,7 +120,12 @@ class ChromeTab {
     private manifest?: FileManifest,
     private s3?: S3
   ) {
-    this.config = { skipHotReload: false, failOnExceptions: false, ...config }
+    this.config = {
+      skipHotReload: false,
+      failOnExceptions: false,
+      logging: false,
+      ...config,
+    }
     this.state = 'starting'
     this.timeout = setTimeout(this.onTimeout, 10_000)
     this.requestMap = {}
@@ -120,9 +135,10 @@ class ChromeTab {
   setupPage () {
     this.page.setRequestInterception(true)
     this.page.on('request', this.onRequestPaused)
-    this.page.on('console', async (message) =>
+    this.page.on('console', async (message) => {
+      if (this.config.logging) console.log('Log:', message.text())
       this.onMessageAdded(message.text())
-    )
+    })
     this.page.on('error', (error) => {
       this.onExceptionThrown(error)
     })
@@ -165,13 +181,13 @@ class ChromeTab {
     return promise
   }
 
-  resolveWork?: (value: unknown) => void
-  setTest(test: Test) {
+  resolveWork?: (value: TestResult | null) => void
+  setTest(test: Test): Promise<TestResult | null> {
     if (this.test) {
       this.resolveWork?.(null)
     }
 
-    const promise = new Promise((res) => {
+    const promise = new Promise<TestResult | null>((res) => {
       this.resolveWork = res
     })
     this.test = test
@@ -345,19 +361,19 @@ class ChromeTab {
     fullName: string
     log?: log
   }) {
+    if (!this.startAt) {
+      return this.resolveWork?.(null)
+    }
     const message = {
       ...rawMessage,
-      time: this.startAt && new Date().getTime() - this.startAt.getTime(),
+      time: new Date().getTime() - this.startAt.getTime(),
     }
 
     if (!this.test?.logs || !this.test.logs.console) {
       delete message.log
     }
 
-    if (this.resolveWork) {
-      this.resolveWork(message)
-    }
-
+    this.resolveWork?.(message)
     this.resolveWork = undefined
     this.test = undefined
   }
@@ -432,12 +448,12 @@ class ChromeTab {
             Key: key,
           })
           .promise()
-        const body = response.Body?.toString()
+        const body = response.Body as Buffer
 
         await request.respond({
           status: 200,
           contentType: response.ContentType,
-          body,
+          body
         })
       } catch (e) {
         // There is a chance for a redirect or new tab while this s3 request is going through
@@ -498,7 +514,7 @@ export default class ChromeWrapper {
   async openTab(
     url: string,
     id: string,
-    config: ChromeTabConfig,
+    config: Partial<ChromeTabConfig>,
     manifest?: FileManifest
   ): Promise<ChromeTab> {
     if (!this.browser) throw new Error('Browser not setup')
