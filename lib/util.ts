@@ -162,7 +162,7 @@ export async function invoke(
 }
 
 export async function workTests(args: {deflakeLimit: number, testNames: string[], sessionId: string }, rerun = true) : Promise<WorkTestsResult> {
-  const response = (await invoke('zen-workTests-staging', args)) as WorkTestsResult
+  const response = (await invoke(Zen.config.lambdaNames.workTests, args)) as WorkTestsResult
   const timeoutTests = args.testNames.filter((test) => {
     const results = response.results[test]
     const result = results.at(-1)
