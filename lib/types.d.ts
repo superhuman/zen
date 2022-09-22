@@ -6,15 +6,8 @@ import Journal from './journal'
 import WebpackAdapter from './webpack'
 import type { metric } from './profiler'
 
-export type Zen = {
-  s3Sync: S3Sync
-  lambda: AWS.Lambda
-  journal: Journal
-  webpack: WebpackAdapter
-  indexHtml: (pageType: string, forS3: boolean) => string
-
-  config: {
-    log?: (metrics: metric[]) => Promise<void>
+export type Config = {
+  log?: (metrics: metric[]) => Promise<void>
     appRoot: string
     port: number
     testDependencies: string[]
@@ -29,7 +22,7 @@ export type Zen = {
 
     // TODO flesh this out
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    webpack: any
+    webpack?: any
     chrome?: {
       width?: number
       height?: number
@@ -39,7 +32,15 @@ export type Zen = {
       workTests: string
       listTests: string
     }
-  }
+}
+
+export type Zen = {
+  s3Sync: S3Sync
+  lambda: AWS.Lambda
+  journal: Journal
+  webpack?: WebpackAdapter
+  indexHtml: (pageType: string, forS3: boolean) => string
+  config: ZenConfig
 }
 
 export type File = {

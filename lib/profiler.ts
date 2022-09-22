@@ -1,4 +1,4 @@
-import type { Zen } from './index'
+import type { Zen } from './types'
 
 export type metric = {
   name: string

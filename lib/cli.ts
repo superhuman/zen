@@ -2,10 +2,11 @@
 
 // @ts-expect-error server is not typed
 import Server from './server'
-import initZen, { Zen } from './index'
+import initZen from './index'
 import yargs from 'yargs'
 import { invoke, workTests } from './util'
 import * as Profiler from './profiler'
+import { Zen } from './types'
 
 type testFailure = {
   fullName: string

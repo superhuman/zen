@@ -154,7 +154,7 @@ export async function invoke(
     if (retry > 0 && e instanceof Error && isRetryableError(e)) {
       // 10s is arbitrary but hopefully it gives time for things like rate-limiting to resolve
       await timeout(10_000)
-      return invoke(lambda, name, args, retry - 1)
+      return invoke(zen, name, args, retry - 1)
     }
 
     throw e
