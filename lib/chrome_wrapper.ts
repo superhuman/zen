@@ -132,7 +132,7 @@ export class ChromeTab {
     this.setupPage()
   }
 
-  setupPage() : void {
+  setupPage(): void {
     this.page.setRequestInterception(true)
     this.page.on('request', this.onRequestPaused)
     this.page.on('console', async (message) => {
@@ -144,27 +144,33 @@ export class ChromeTab {
     })
   }
 
-  async resizeWindow({ width, height }: { width: number; height: number }) : Promise<void> {
+  async resizeWindow({
+    width,
+    height,
+  }: {
+    width: number
+    height: number
+  }): Promise<void> {
     return this.page.setViewport({ width, height })
   }
 
-  disconnect() : Promise<void> {
+  disconnect(): Promise<void> {
     return this.page.close()
   }
 
-  changeState(state: ChromeTabState) : void {
+  changeState(state: ChromeTabState): void {
     clearTimeout(this.timeout)
     this.state = state
   }
 
-  setCodeHash(codeHash: string) : void {
+  setCodeHash(codeHash: string): void {
     this.codeHash = codeHash
     if (this.state === 'idle' || this.state === 'badCode') {
       this.reload()
     }
   }
 
-  async awaitLoad() : Promise<void> {
+  async awaitLoad(): Promise<void> {
     let resolve: () => void
     const handler = (message: Puppeteer.ConsoleMessage) => {
       const text = message.text()
@@ -206,19 +212,19 @@ export class ChromeTab {
     resolve: (value: string) => void
     reject: (reason: string) => void
   }
-  getTestNames() : Promise<string> {
+  getTestNames(): Promise<string> {
     const promise = new Promise<string>((resolve, reject) => {
       this.listRequest = { resolve, reject }
     })
     return promise
   }
 
-  _evaluate(code: string) : Promise<unknown> {
+  _evaluate(code: string): Promise<unknown> {
     return this._retry(() => this.page.evaluate(code))
   }
 
   // Attempt to hot reload the latest code
-  async hotReload() : Promise<void> {
+  async hotReload(): Promise<void> {
     if (this.config.skipHotReload) {
       return this.reload()
     }
@@ -230,7 +236,7 @@ export class ChromeTab {
   }
 
   startAt?: Date
-  async run() : Promise<void> {
+  async run(): Promise<void> {
     this.changeState('running')
     this.startAt = new Date()
     this.timeout = setTimeout(this.onTimeout, 20_000)
@@ -241,7 +247,7 @@ export class ChromeTab {
 
   badCodeError?: string
   badCodeStack?: string
-  badCode(msg: string, stack: string[]) : void {
+  badCode(msg: string, stack: string[]): void {
     this.changeState('badCode')
     this.badCodeError = msg
     this.badCodeStack = stack.join('\n')
@@ -254,7 +260,7 @@ export class ChromeTab {
     }
   }
 
-  async listTests() : Promise<void> {
+  async listTests(): Promise<void> {
     // TODO clean up this typing
     const { result, exceptionDetails } = (await this._evaluate(
       `Latte.flatten().map(t => t.fullName)`
@@ -272,7 +278,7 @@ export class ChromeTab {
     this.listRequest.resolve(result.value)
   }
 
-  becomeIdle() : void {
+  becomeIdle(): void {
     this.changeState('idle')
     if (this.codeHash) this.hotReload()
     else if (this.test) this.run()
@@ -300,7 +306,7 @@ export class ChromeTab {
     }
   }
 
-  reload() : Promise<void> {
+  reload(): Promise<void> {
     this.changeState('loading')
     this.timeout = setTimeout(this.onTimeout, 10_000)
     this.codeHash = undefined
@@ -312,7 +318,7 @@ export class ChromeTab {
     })
   }
 
-  onTimeout = () : void => {
+  onTimeout = (): void => {
     if (this.state == 'running') {
       this.failTest('Chrome-level test timeout')
     } else if (this.state == 'hotReload') {
@@ -326,7 +332,7 @@ export class ChromeTab {
     this.reload()
   }
 
-  onMessageAdded(text: string) : void {
+  onMessageAdded(text: string): void {
     const register = (name: string, cb: (value?: unknown) => void) => {
       if (text.startsWith(name)) {
         const value = text.slice(name.length).trim()
@@ -351,11 +357,11 @@ export class ChromeTab {
     })
     register('Zen.resizeWindow', (args) => {
       if (!args || typeof args !== 'object') return
-      this.resizeWindow(args as { width: number, height: number })
+      this.resizeWindow(args as { width: number; height: number })
     })
   }
 
-  failTest(error: string, stack = '') : void {
+  failTest(error: string, stack = ''): void {
     const result = { error, stack, fullName: this.test?.testName || '' }
 
     this.finishTest(result)
@@ -366,7 +372,7 @@ export class ChromeTab {
     stack?: string
     fullName: string
     log?: log
-  }) : void {
+  }): void {
     if (!this.startAt) {
       return this.resolveWork?.(null)
     }
@@ -384,7 +390,7 @@ export class ChromeTab {
     this.test = undefined
   }
 
-  onExceptionThrown(error : Error) : void {
+  onExceptionThrown(error: Error): void {
     console.log(`[${this.id}]`, error.message, error.stack)
 
     const stack = error.stack?.split('\n') || []
@@ -403,7 +409,7 @@ export class ChromeTab {
     }
   }
 
-  onRequestPaused = async (request: Puppeteer.HTTPRequest) : Promise<void> => {
+  onRequestPaused = async (request: Puppeteer.HTTPRequest): Promise<void> => {
     const gatewayUrl = process.env.GATEWAY_URL
     const requestUrl = request.url()
     const isToGateway = gatewayUrl && requestUrl.indexOf(gatewayUrl) >= 0
