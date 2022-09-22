@@ -4,9 +4,8 @@
 import Server from './server'
 import initZen, { Zen } from './index'
 import yargs from 'yargs'
-import { invoke } from './util.js'
+import { invoke, workTests } from './util'
 import * as Profiler from './profiler'
-import { workTests } from './util'
 
 type testFailure = {
   fullName: string
@@ -71,7 +70,7 @@ async function runTests(
   const failedTests: failedTest[][] = await Promise.all(
     groups.map(async (group: { tests: string[] }): Promise<failedTest[]> => {
       try {
-        const response = await workTests({
+        const response = await workTests(zen, {
           deflakeLimit: opts.maxAttempts,
           testNames: group.tests,
           sessionId: zen.config.sessionId,
@@ -188,8 +187,8 @@ async function run(zen: Zen, opts: CLIOptions) {
 
     t0 = Date.now()
     console.log('Getting test names')
-    // @ts-expect-error Until invoke's type is fixed this should error
-    let workingSet: string[] = await invoke(zen.config.lambdaNames.listTests, {
+    // @ts-expect-error(2322) invoke return is not typed right now
+    let workingSet: string[] = await invoke(zen, zen.config.lambdaNames.listTests, {
       sessionId: zen.config.sessionId,
     })
 

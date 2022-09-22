@@ -1,5 +1,6 @@
 import Puppeteer from 'puppeteer-core'
 import { S3 } from 'aws-sdk'
+import { FileManifest } from './types'
 
 export type TestResult = {
   error?: string
@@ -97,11 +98,6 @@ type Test = {
   logs?: { console: string }
   batch?: Test[]
   runId: string
-}
-type FileManifest = {
-  index: string
-  fileMap: Record<string, undefined | string>
-  assetUrl: string
 }
 
 export class ChromeTab {
@@ -209,11 +205,11 @@ export class ChromeTab {
   }
 
   listRequest?: {
-    resolve: (value: string) => void
+    resolve: (value: string[]) => void
     reject: (reason: string) => void
   }
-  getTestNames(): Promise<string> {
-    const promise = new Promise<string>((resolve, reject) => {
+  getTestNames(): Promise<string[]> {
+    const promise = new Promise<string[]>((resolve, reject) => {
       this.listRequest = { resolve, reject }
     })
     return promise
@@ -264,7 +260,7 @@ export class ChromeTab {
     // TODO clean up this typing
     const { result, exceptionDetails } = (await this._evaluate(
       `Latte.flatten().map(t => t.fullName)`
-    )) as { result: { value: string }; exceptionDetails: { message: string } }
+    )) as { result: { value: string[] }; exceptionDetails: { message: string } }
 
     // TODO there should be a way to encode listRequest in the types as non-nullable
     if (!this.listRequest) {

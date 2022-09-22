@@ -6,5 +6,8 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true
-  }
+  },
+  "exclude": [
+    "tools"
+  ]
 }

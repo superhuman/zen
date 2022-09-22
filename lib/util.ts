@@ -8,6 +8,7 @@ import WebSocket from 'ws'
 import fetch from 'node-fetch'
 import type http from 'http'
 import type { WorkTestsResult } from './lambda'
+import { Zen } from './types'
 
 export function serveWith404(dir: string): connect.Server {
   return connect()
@@ -129,14 +130,13 @@ function timeout(ms: number): Promise<void> {
 }
 
 export async function invoke(
+  zen: Zen,
   name: string,
   args: unknown,
   retry = 3
 ): Promise<unknown> {
-  // @ts-expect-error Zen global is janky but I don't want to migrate it right now
-  const lambda = Zen.lambda as AWS.Lambda
   try {
-    const result = await lambda
+    const result = await zen.lambda
       .invoke({ FunctionName: name, Payload: JSON.stringify(args) })
       .promise()
 
@@ -154,7 +154,7 @@ export async function invoke(
     if (retry > 0 && e instanceof Error && isRetryableError(e)) {
       // 10s is arbitrary but hopefully it gives time for things like rate-limiting to resolve
       await timeout(10_000)
-      return invoke(name, args, retry - 1)
+      return invoke(lambda, name, args, retry - 1)
     }
 
     throw e
@@ -162,11 +162,12 @@ export async function invoke(
 }
 
 export async function workTests(
+  zen: Zen,
   args: { deflakeLimit: number; testNames: string[]; sessionId: string },
   rerun = true
 ): Promise<WorkTestsResult> {
-  const response = (await invoke(
-    Zen.config.lambdaNames.workTests,
+  const response = (await invoke(zen,
+    zen.config.lambdaNames.workTests,
     args
   )) as WorkTestsResult
   const timeoutTests = args.testNames.filter((test) => {
@@ -181,7 +182,7 @@ export async function workTests(
     console.log('RERUNNING DUE TO LAMBDA TIMEOUT', timeoutTests)
     await timeout(30_000)
     // We don't want this going on endlessly, because there are other errors we may want to do work
-    const newResponse = await workTests(
+    const newResponse = await workTests(zen,
       { ...args, testNames: timeoutTests },
       false
     )

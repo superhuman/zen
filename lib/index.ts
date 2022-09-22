@@ -2,48 +2,17 @@ import * as path from 'path'
 import * as https from 'https'
 import { ensureDir } from './util'
 import * as AWS from 'aws-sdk'
+// @ts-expect-error(7016) s3-sync is any
 import S3Sync from './s3-sync'
+// @ts-expect-error(7016) s3-sync is any
 import Journal from './journal'
 import uuidv4 from 'uuid/v4'
+// @ts-expect-error(7016) webpack is any
 import WebpackAdapter from './webpack'
-import type { metric } from './profiler'
+import type {Zen} from './types'
 
 require('sugar').extend()
-export type Zen = {
-  s3Sync: S3Sync
-  lambda: AWS.Lambda
-  journal: Journal
-  webpack: WebpackAdapter
-  indexHtml: (pageType: string, forS3: boolean) => string
 
-  config: {
-    log?: (metrics: metric[]) => Promise<void>
-    appRoot: string
-    port: number
-    testDependencies: string[]
-    lambdaConcurrency: number
-    htmlTemplate: string
-    sessionId: string
-    useSnapshot: boolean
-    tmpDir: string
-    alsoServe: { addToIndex: boolean; filePath: string }[]
-
-    // TODO flesh this out
-    aws: any
-
-    // TODO flesh this out
-    webpack: any
-    chrome?: {
-      width?: number
-      height?: number
-    }
-    lambdaNames: {
-      // The others are actually never used
-      workTests: string
-      listTests: string
-    }
-  }
-}
 
 export default async function initZen(configFilePath: string): Promise<Zen> {
   // TODO fix the arg part, the order for shifting was broken because of import order
