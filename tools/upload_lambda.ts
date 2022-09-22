@@ -4,7 +4,7 @@ const path = require('path')
 const esbuild = require('esbuild')
 
 type BundleConfig = {
-  bundle: boolean,
+  bundle: boolean
   external?: string[]
 }
 
@@ -14,7 +14,7 @@ const files = ['lambda.ts', 'chrome_wrapper.ts']
 files.forEach((file) => {
   const [basename, filetype] = file.split('.')
   // TODO make this use partial esbuild config
-  let bundleConfig : BundleConfig = {
+  let bundleConfig: BundleConfig = {
     bundle: false,
   }
   if (file !== 'lambda') {

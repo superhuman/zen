@@ -8,30 +8,30 @@ import type { metric } from './profiler'
 
 export type Config = {
   log?: (metrics: metric[]) => Promise<void>
-    appRoot: string
-    port: number
-    testDependencies: string[]
-    lambdaConcurrency: number
-    htmlTemplate: string
-    sessionId: string
-    useSnapshot: boolean
-    tmpDir: string
-    alsoServe: { addToIndex: boolean; filePath: string }[]
+  appRoot: string
+  port: number
+  testDependencies: string[]
+  lambdaConcurrency: number
+  htmlTemplate: string
+  sessionId: string
+  useSnapshot: boolean
+  tmpDir: string
+  alsoServe: { addToIndex: boolean; filePath: string }[]
 
-    aws: AWS.config.update
+  aws: AWS.config.update
 
-    // TODO flesh this out
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    webpack?: any
-    chrome?: {
-      width?: number
-      height?: number
-    }
-    lambdaNames: {
-      // The others are actually never used
-      workTests: string
-      listTests: string
-    }
+  // TODO flesh this out
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  webpack?: any
+  chrome?: {
+    width?: number
+    height?: number
+  }
+  lambdaNames: {
+    // The others are actually never used
+    workTests: string
+    listTests: string
+  }
 }
 
 export type Zen = {

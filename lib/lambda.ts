@@ -115,15 +115,18 @@ export const workTests = async (
   }
 }
 
-export async function listTests(opts: { sessionId: string}): Promise<string[]> {
+export async function listTests(opts: {
+  sessionId: string
+}): Promise<string[]> {
   const tab = await prepareChrome(opts)
   const names = await tab.getTestNames()
   return names
 }
 
-
-export const sync = async (manifest: FileManifest) : Promise<{ needed: File[] }> => {
-  if (!process.env.ASSET_BUCKET) throw new Error("ASSET_BUCKET not set")
+export const sync = async (
+  manifest: FileManifest
+): Promise<{ needed: File[] }> => {
+  if (!process.env.ASSET_BUCKET) throw new Error('ASSET_BUCKET not set')
   const bucket = process.env.ASSET_BUCKET
   console.log('bucket', bucket)
   const s3 = new AWS.S3({ params: { Bucket: bucket } })
@@ -139,7 +142,7 @@ export const sync = async (manifest: FileManifest) : Promise<{ needed: File[] }>
 
   // TODO: it might be faster to use listObjectsV2, especially if there are many files
   // to check, and S3 is pruned to have less than 2k files. Blame this comment for an example.
-  const needed : File[] = []
+  const needed: File[] = []
   const toCheck = manifest.files.filter((f) => f.toCheck)
   console.log(`Checking ${toCheck.length} files`)
   await Promise.all(
@@ -191,8 +194,8 @@ async function prepareChrome({ sessionId }: { sessionId: string }) {
   )
 }
 
-async function getManifest(sessionId : string) {
-  if (!process.env.ASSET_BUCKET) throw new Error("ASSET_BUCKET not set")
+async function getManifest(sessionId: string) {
+  if (!process.env.ASSET_BUCKET) throw new Error('ASSET_BUCKET not set')
   const bucket = process.env.ASSET_BUCKET
 
   try {
@@ -203,7 +206,7 @@ async function getManifest(sessionId : string) {
         Key: `session-${sessionId}.json`,
       })
       .promise()
-    const manifest : FileManifest  = {
+    const manifest: FileManifest = {
       ...JSON.parse(resp.Body?.toString('utf-8') || ''),
       fileMap: {},
     }

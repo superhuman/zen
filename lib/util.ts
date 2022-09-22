@@ -166,7 +166,8 @@ export async function workTests(
   args: { deflakeLimit: number; testNames: string[]; sessionId: string },
   rerun = true
 ): Promise<WorkTestsResult> {
-  const response = (await invoke(zen,
+  const response = (await invoke(
+    zen,
     zen.config.lambdaNames.workTests,
     args
   )) as WorkTestsResult
@@ -182,7 +183,8 @@ export async function workTests(
     console.log('RERUNNING DUE TO LAMBDA TIMEOUT', timeoutTests)
     await timeout(30_000)
     // We don't want this going on endlessly, because there are other errors we may want to do work
-    const newResponse = await workTests(zen,
+    const newResponse = await workTests(
+      zen,
       { ...args, testNames: timeoutTests },
       false
     )
