@@ -28,7 +28,9 @@ files.forEach((file) => {
   zip.addLocalFile(path.join(__dirname, `../build/lambda_code/${basename}.js`))
 })
 
-zip.writeZip(path.join(__dirname, '../build/lambda_code/lambda-code-timeout.zip'))
+zip.writeZip(
+  path.join(__dirname, '../build/lambda_code/lambda-code-timeout.zip')
+)
 
 const assetBucket = process.env.ASSET_BUCKET
 const secretAccessKey = process.env.SECRET_ACCESS_KEY

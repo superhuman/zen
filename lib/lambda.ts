@@ -41,7 +41,7 @@ export const workTests = async (
     const timeout = new Promise<boolean>((resolve) =>
       setTimeout(() => resolve(true), remainingTime - 5_000)
     )
-    const runTestSet = async (tests: string[], tab : ChromeTab) => {
+    const runTestSet = async (tests: string[], tab: ChromeTab) => {
       for (const testName of tests) {
         activeTest = testName
         const testOpts = { runId: opts.runId, testName }
@@ -72,7 +72,7 @@ export const workTests = async (
       // Return false to indicate no timeout
       return false
     }
-    
+
     const didTimeout = await Promise.race([run(), timeout])
     if (didTimeout) throw new Error('Lambda Timeout')
 

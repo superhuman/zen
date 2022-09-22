@@ -77,18 +77,23 @@ async function runTests(
         const logStreamName = response.logStreamName
 
         // Map back to the old representation and fill in any tests that may have not run
-        const results = group.tests.map(test => {
+        const results = group.tests.map((test) => {
           const results = response.results[test] || []
           const result = results.at(-1)
 
           if (!result) {
             console.log(test, response.results, results)
-            return { fullName: test, attempts: 0, error: "Failed to run on remote!", logStream: logStreamName }
+            return {
+              fullName: test,
+              attempts: 0,
+              error: 'Failed to run on remote!',
+              logStream: logStreamName,
+            }
           } else {
             return {
               ...result,
               logStream: logStreamName,
-              attempts: results.length
+              attempts: results.length,
             }
           }
         })
@@ -179,9 +184,12 @@ async function run(zen: Zen, opts: CLIOptions) {
 
     t0 = Date.now()
     console.log('Getting test names')
-    let workingSet: string[] = await Util.invoke(zen.config.lambdaNames.listTests, {
-      sessionId: zen.config.sessionId,
-    })
+    let workingSet: string[] = await Util.invoke(
+      zen.config.lambdaNames.listTests,
+      {
+        sessionId: zen.config.sessionId,
+      }
+    )
 
     // In case there is an infinite loop, this should brick the test running
     let runsLeft = 5

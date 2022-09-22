@@ -131,8 +131,8 @@ export class ChromeTab {
     this.requestMap = {}
     this.setupPage()
   }
-  
-  setupPage () {
+
+  setupPage() {
     this.page.setRequestInterception(true)
     this.page.on('request', this.onRequestPaused)
     this.page.on('console', async (message) => {
@@ -163,20 +163,20 @@ export class ChromeTab {
       this.reload()
     }
   }
-  
-  async awaitLoad () {
-    let resolve : () => void
-    const handler = (message : Puppeteer.ConsoleMessage) => {
-      const text = message.text() 
+
+  async awaitLoad() {
+    let resolve: () => void
+    const handler = (message: Puppeteer.ConsoleMessage) => {
+      const text = message.text()
       if (text.startsWith('Zen.idle')) resolve()
     }
     const promise = new Promise((res, rej) => {
       resolve = () => {
         this.page.off('console', handler)
-        res(undefined) 
+        res(undefined)
       }
     })
-    
+
     this.page.on('console', handler)
     return promise
   }
@@ -284,8 +284,11 @@ export class ChromeTab {
     try {
       return await cb()
     } catch (e) {
-      if (!(e instanceof Error)) return 
-      if (e.message.includes('Session closed') || e.message.includes('Zen.run is not a function')) {
+      if (!(e instanceof Error)) return
+      if (
+        e.message.includes('Session closed') ||
+        e.message.includes('Zen.run is not a function')
+      ) {
         const oldUrl = this.page.url()
         this.page = await this.browser.newPage()
         this.setupPage()
@@ -453,7 +456,7 @@ export class ChromeTab {
         await request.respond({
           status: 200,
           contentType: response.ContentType,
-          body
+          body,
         })
       } catch (e) {
         // There is a chance for a redirect or new tab while this s3 request is going through

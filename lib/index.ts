@@ -36,10 +36,10 @@ export type Zen = {
     chrome?: {
       width?: number
       height?: number
-    },
+    }
     lambdaNames: {
       // The others are actually never used
-      workTests: string,
+      workTests: string
       listTests: string
     }
   }
@@ -68,7 +68,7 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
   config.useSnapshot === undefined ? true : !!config.useSnapshot
   config.lambdaNames = config.lambdaNames || {
     workTests: 'zen-workTests',
-    listTests: 'zen-listTests'
+    listTests: 'zen-listTests',
   }
 
   // tmpDir is where we cache files between runs
