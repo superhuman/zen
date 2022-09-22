@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+// @ts-expect-error server is not typed
 import Server from './server'
 import initZen, { Zen } from './index'
 import yargs from 'yargs'
@@ -65,9 +66,10 @@ async function runTests(
   tests: string[]
 ): Promise<TestResultsMap> {
   const groups = zen.journal.groupTests(tests, zen.config.lambdaConcurrency)
+  type failedTest = testFailure & {logStream: string}
 
-  const failedTests: testFailure[][] = await Promise.all(
-    groups.map(async (group: { tests: string[] }): Promise<testFailure[]> => {
+  const failedTests: failedTest[][] = await Promise.all(
+    groups.map(async (group: { tests: string[] }): Promise<failedTest[]> => {
       try {
         const response = await workTests({
           deflakeLimit: opts.maxAttempts,
@@ -87,6 +89,7 @@ async function runTests(
               fullName: test,
               attempts: 0,
               error: 'Failed to run on remote!',
+              time: 0,
               logStream: logStreamName,
             }
           } else {
@@ -107,6 +110,7 @@ async function runTests(
             attempts: 0,
             error: 'zen failed to run this group',
             time: 0,
+            logStream: ''
           }
         })
       }
@@ -184,7 +188,8 @@ async function run(zen: Zen, opts: CLIOptions) {
 
     t0 = Date.now()
     console.log('Getting test names')
-    let workingSet: string[] = await Util.invoke(
+    // @ts-expect-error Until invoke's type is fixed this should error
+    let workingSet: string[] = await invoke(
       zen.config.lambdaNames.listTests,
       {
         sessionId: zen.config.sessionId,
@@ -239,7 +244,7 @@ async function run(zen: Zen, opts: CLIOptions) {
       }
     }
 
-    if (opts.logging) Profiler.logBatch(metrics)
+    if (opts.logging) Profiler.logBatch(zen, metrics)
     console.log(`Took ${Date.now() - t0}ms`)
     console.log(
       `${failCount ? '😢' : '🎉'} ${failCount} failed test${

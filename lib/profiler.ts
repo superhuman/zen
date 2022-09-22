@@ -1,17 +1,17 @@
-import Zen from './index'
+import type { Zen } from './index'
 
 export type metric = {
   name: string
-  fields: Record<string, string | number>
+  fields: Record<string, unknown>
 }
 
-export function logBatch(metrics: metric[]) {
-  let log = Zen.config.log
+export async function logBatch(zen : Zen, metrics: metric[]) : Promise<void> {
+  const log = zen.config.log
   if (!log) return
 
   return log(metrics)
 }
 
-export function log(name: metric['name'], fields: metric['fields']) {
-  return logBatch([{ name, fields }])
+export function log(zen : Zen, name: metric['name'], fields: metric['fields']) : Promise<void> {
+  return logBatch(zen, [{ name, fields }])
 }
