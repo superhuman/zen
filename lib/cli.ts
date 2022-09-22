@@ -66,7 +66,7 @@ async function runTests(
   tests: string[]
 ): Promise<TestResultsMap> {
   const groups = zen.journal.groupTests(tests, zen.config.lambdaConcurrency)
-  type failedTest = testFailure & {logStream: string}
+  type failedTest = testFailure & { logStream: string }
 
   const failedTests: failedTest[][] = await Promise.all(
     groups.map(async (group: { tests: string[] }): Promise<failedTest[]> => {
@@ -110,7 +110,7 @@ async function runTests(
             attempts: 0,
             error: 'zen failed to run this group',
             time: 0,
-            logStream: ''
+            logStream: '',
           }
         })
       }
@@ -189,12 +189,9 @@ async function run(zen: Zen, opts: CLIOptions) {
     t0 = Date.now()
     console.log('Getting test names')
     // @ts-expect-error Until invoke's type is fixed this should error
-    let workingSet: string[] = await invoke(
-      zen.config.lambdaNames.listTests,
-      {
-        sessionId: zen.config.sessionId,
-      }
-    )
+    let workingSet: string[] = await invoke(zen.config.lambdaNames.listTests, {
+      sessionId: zen.config.sessionId,
+    })
 
     // In case there is an infinite loop, this should brick the test running
     let runsLeft = 5
