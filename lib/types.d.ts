@@ -6,6 +6,13 @@ import Journal from './journal'
 import WebpackAdapter from './webpack'
 import type { metric } from './profiler'
 
+export type TestResult = {
+  error?: string
+  time: number
+  fullName: string
+  log?: log
+}
+
 export type Config = {
   log?: (metrics: metric[]) => Promise<void>
   appRoot: string

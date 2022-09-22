@@ -1,7 +1,7 @@
 import type ChromeWrapper from './chrome_wrapper'
-import type { ChromeTab, TestResult } from './chrome_wrapper'
+import type { ChromeTab } from './chrome_wrapper'
 import type { Context } from 'aws-lambda'
-import type { FileManifest, File } from './types'
+import type { FileManifest, File, TestResult } from './types'
 import AWS from 'aws-sdk'
 // TODO test if this works
 let wrapper: ChromeWrapper // store chrome wrapper globally. In theory we could reuse this between runs

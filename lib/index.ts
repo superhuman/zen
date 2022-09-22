@@ -4,7 +4,6 @@ import { ensureDir } from './util'
 import * as AWS from 'aws-sdk'
 // @ts-expect-error(7016) s3-sync is any
 import S3Sync from './s3-sync'
-// @ts-expect-error(7016) s3-sync is any
 import Journal from './journal'
 import { v4 as uuidv4 } from 'uuid'
 // @ts-expect-error(7016) webpack is any
@@ -65,7 +64,7 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
     config,
     s3Sync: new S3Sync(),
     lambda: new AWS.Lambda(),
-    journal: new Journal(),
+    journal: new Journal(config),
     indexHtml: function indexHtml(pageType: string, forS3: boolean) {
       const deps = ['build/latte.js']
       if (pageType == 'head') {

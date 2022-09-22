@@ -1,13 +1,7 @@
 import Puppeteer from 'puppeteer-core'
 import { S3 } from 'aws-sdk'
 import { FileManifest } from './types'
-
-export type TestResult = {
-  error?: string
-  time: number
-  fullName: string
-  log?: log
-}
+import { TestResult } from './types'
 
 const localChromeFlags = ['--headless', '--disable-gpu']
 const lambdaChromeFlags = [
