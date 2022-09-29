@@ -59,9 +59,21 @@ async function createConfig(configFilePath: string): Promise<Config> {
 export default async function initZen(configFilePath: string): Promise<Zen> {
   const config = await createConfig(configFilePath)
 
+  let webpack
+  if (config.webpack) {
+    // boot up webpack (if configured)
+    webpack = new WebpackAdapter(config.webpack)
+  }
+
+  // Create a partial Zen, with enought to work for s3Sync
+  // TODO setup order to make more sense
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(global as any).Zen = { config, webpack }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const zen: Zen = ((global as any).Zen = {
     config,
+    webpack,
     s3Sync: new S3Sync(),
     lambda: new AWS.Lambda(),
     journal: new Journal(config),
@@ -121,11 +133,6 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
 
   // Without this, node limits our requests and slows down running on lambda
   https.globalAgent.maxSockets = 2000 // TODO multiplex over fewer connections
-
-  if (config.webpack) {
-    // boot up webpack (if configured)
-    zen.webpack = new WebpackAdapter(config.webpack)
-  }
 
   return zen
 }
