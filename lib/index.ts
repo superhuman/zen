@@ -70,6 +70,9 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ;(global as any).Zen = { config, webpack }
 
+  AWS.config.update(config.aws)
+  ensureDir(config.tmpDir)
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const zen: Zen = ((global as any).Zen = {
     config,
@@ -125,11 +128,6 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
       return zen.config.htmlTemplate.replace('ZEN_SCRIPTS', scripts.join('\n'))
     },
   })
-
-  ensureDir(config.tmpDir)
-  console.log('Using tmpDir', config.tmpDir)
-
-  AWS.config.update(config.aws)
 
   // Without this, node limits our requests and slows down running on lambda
   https.globalAgent.maxSockets = 2000 // TODO multiplex over fewer connections
