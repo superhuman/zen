@@ -27,7 +27,8 @@ yargs(process.argv.slice(2))
   .command(
     ['local [configFile]', 'server [configFile]'],
     'Run zen with a local server',
-    (yargs) => {
+    // @ts-expect-error yargs changed their type def but this pattern still works
+    (yargs: yargs.Argv) => {
       yargs.positional('file', {
         type: 'string',
         describe: 'Path to the config file',
@@ -41,7 +42,8 @@ yargs(process.argv.slice(2))
   .command(
     'remote [configFile]',
     'Run zen in the console',
-    (yargs) => {
+    // @ts-expect-error yargs changed their type def but this pattern still works
+    (yargs: yargs.Argv) => {
       yargs.positional('file', {
         type: 'string',
         describe: 'Path to the config file',

@@ -156,9 +156,10 @@ export const sync = async (
           .promise()
         console.log('Found', f.versionedPath, resp)
       } catch (e) {
-        if (e instanceof AWS.AWSError) {
+        if (e instanceof Error) {
+          const error = e as AWS.AWSError
           needed.push(f)
-          if (e.code !== 'NotFound') {
+          if (error.code !== 'NotFound') {
             console.log('Error heading', f.versionedPath, e)
           }
         }

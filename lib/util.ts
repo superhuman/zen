@@ -57,7 +57,10 @@ export async function serveIcons(
   _req: http.IncomingMessage,
   res: http.ServerResponse
 ): Promise<void> {
-  if (iconCache) return res.end(iconCache)
+  if (iconCache) {
+    res.end(iconCache)
+    return
+  }
   const icons: Record<string, string | undefined> = {}
   const root = path.join(__dirname, '../assets')
   await Promise.all(
