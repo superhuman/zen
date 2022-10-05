@@ -8,6 +8,7 @@ import WebSocket from 'ws'
 import fetch from 'node-fetch'
 import type http from 'http'
 import type { WorkTestsResult } from './lambda'
+import { Zen } from './types'
 
 export function serveWith404(dir: string): connect.Server {
   return connect()
@@ -56,7 +57,10 @@ export async function serveIcons(
   _req: http.IncomingMessage,
   res: http.ServerResponse
 ): Promise<void> {
-  if (iconCache) return res.end(iconCache)
+  if (iconCache) {
+    res.end(iconCache)
+    return
+  }
   const icons: Record<string, string | undefined> = {}
   const root = path.join(__dirname, '../assets')
   await Promise.all(
@@ -129,14 +133,13 @@ function timeout(ms: number): Promise<void> {
 }
 
 export async function invoke(
+  zen: Zen,
   name: string,
   args: unknown,
   retry = 3
 ): Promise<unknown> {
-  // @ts-expect-error Zen global is janky but I don't want to migrate it right now
-  const lambda = Zen.lambda as AWS.Lambda
   try {
-    const result = await lambda
+    const result = await zen.lambda
       .invoke({ FunctionName: name, Payload: JSON.stringify(args) })
       .promise()
 
@@ -154,32 +157,47 @@ export async function invoke(
     if (retry > 0 && e instanceof Error && isRetryableError(e)) {
       // 10s is arbitrary but hopefully it gives time for things like rate-limiting to resolve
       await timeout(10_000)
-      return invoke(name, args, retry - 1)
+      return invoke(zen, name, args, retry - 1)
     }
 
     throw e
   }
 }
 
-export async function workTests(args: {deflakeLimit: number, testNames: string[], sessionId: string }, rerun = true) : Promise<WorkTestsResult> {
-  const response = (await invoke(Zen.config.lambdaNames.workTests, args)) as WorkTestsResult
+export async function workTests(
+  zen: Zen,
+  args: { deflakeLimit: number; testNames: string[]; sessionId: string },
+  rerun = true
+): Promise<WorkTestsResult> {
+  const response = (await invoke(
+    zen,
+    zen.config.lambdaNames.workTests,
+    args
+  )) as WorkTestsResult
   const timeoutTests = args.testNames.filter((test) => {
     const results = response.results[test]
     const result = results.at(-1)
-    
+
     return result?.error?.includes('Lambda Timeout')
   })
-  
+
   // If there are timeouts, then keep calling workTests again with the unresolved tests
   if (timeoutTests.length > 0 && rerun) {
-    console.log("RERUNNING DUE TO LAMBDA TIMEOUT", timeoutTests)
+    console.log('RERUNNING DUE TO LAMBDA TIMEOUT', timeoutTests)
     await timeout(30_000)
     // We don't want this going on endlessly, because there are other errors we may want to do work
-    const newResponse = await workTests({ ...args, testNames: timeoutTests }, false)
+    const newResponse = await workTests(
+      zen,
+      { ...args, testNames: timeoutTests },
+      false
+    )
     timeoutTests.forEach((test) => {
-      response.results[test] = [...response.results[test], ...newResponse.results[test]]
+      response.results[test] = [
+        ...response.results[test],
+        ...newResponse.results[test],
+      ]
     })
   }
-  
+
   return response
 }

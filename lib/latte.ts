@@ -13,7 +13,7 @@ export type FnOrGroup = TestFn | TestGroup
 export type OnDispose = (cb: () => void) => void
 type mode = 'debug' | 'headless'
 type helpers = {
-  resizeWindow: (dimensions: { width: number, height: number }) => void
+  resizeWindow: (dimensions: { width: number; height: number }) => void
 }
 type LatteOptions = { mode: mode; willHotReload: boolean; helpers?: helpers }
 type TestContext = Partial<Record<string, FnOrGroup>> & {

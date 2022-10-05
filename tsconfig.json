@@ -4,6 +4,8 @@
     "module": "ESNext",
     "moduleResolution": "node",
     "strict": true,
-    "esModuleInterop": true
-  }
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "exclude": ["tools"]
 }

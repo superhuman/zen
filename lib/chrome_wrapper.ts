@@ -1,12 +1,7 @@
 import Puppeteer from 'puppeteer-core'
 import { S3 } from 'aws-sdk'
-
-export type TestResult = {
-  error?: string
-  time: number
-  fullName: string
-  log?: log
-}
+import { FileManifest } from './types'
+import { TestResult } from './types'
 
 const localChromeFlags = ['--headless', '--disable-gpu']
 const lambdaChromeFlags = [
@@ -98,11 +93,6 @@ type Test = {
   batch?: Test[]
   runId: string
 }
-type FileManifest = {
-  index: string
-  fileMap: Record<string, undefined | string>
-  assetUrl: string
-}
 
 export class ChromeTab {
   codeHash?: string
@@ -131,8 +121,8 @@ export class ChromeTab {
     this.requestMap = {}
     this.setupPage()
   }
-  
-  setupPage () {
+
+  setupPage(): void {
     this.page.setRequestInterception(true)
     this.page.on('request', this.onRequestPaused)
     this.page.on('console', async (message) => {
@@ -144,39 +134,45 @@ export class ChromeTab {
     })
   }
 
-  async resizeWindow({ width, height }: { width: number; height: number }) {
+  async resizeWindow({
+    width,
+    height,
+  }: {
+    width: number
+    height: number
+  }): Promise<void> {
     return this.page.setViewport({ width, height })
   }
 
-  disconnect() {
+  disconnect(): Promise<void> {
     return this.page.close()
   }
 
-  changeState(state: ChromeTabState) {
+  changeState(state: ChromeTabState): void {
     clearTimeout(this.timeout)
     this.state = state
   }
 
-  setCodeHash(codeHash: string) {
+  setCodeHash(codeHash: string): void {
     this.codeHash = codeHash
     if (this.state === 'idle' || this.state === 'badCode') {
       this.reload()
     }
   }
-  
-  async awaitLoad () {
-    let resolve : () => void
-    const handler = (message : Puppeteer.ConsoleMessage) => {
-      const text = message.text() 
+
+  async awaitLoad(): Promise<void> {
+    let resolve: () => void
+    const handler = (message: Puppeteer.ConsoleMessage) => {
+      const text = message.text()
       if (text.startsWith('Zen.idle')) resolve()
     }
-    const promise = new Promise((res, rej) => {
+    const promise = new Promise<void>((res) => {
       resolve = () => {
         this.page.off('console', handler)
-        res(undefined) 
+        res()
       }
     })
-    
+
     this.page.on('console', handler)
     return promise
   }
@@ -203,22 +199,22 @@ export class ChromeTab {
   }
 
   listRequest?: {
-    resolve: (value: unknown) => void
-    reject: (reason: unknown) => void
+    resolve: (value: string[]) => void
+    reject: (reason: string) => void
   }
-  getTestNames() {
-    const promise = new Promise((resolve, reject) => {
+  getTestNames(): Promise<string[]> {
+    const promise = new Promise<string[]>((resolve, reject) => {
       this.listRequest = { resolve, reject }
     })
     return promise
   }
 
-  _evaluate(code: string) {
+  _evaluate(code: string): Promise<unknown> {
     return this._retry(() => this.page.evaluate(code))
   }
 
   // Attempt to hot reload the latest code
-  hotReload() {
+  async hotReload(): Promise<void> {
     if (this.config.skipHotReload) {
       return this.reload()
     }
@@ -230,7 +226,7 @@ export class ChromeTab {
   }
 
   startAt?: Date
-  async run() {
+  async run(): Promise<void> {
     this.changeState('running')
     this.startAt = new Date()
     this.timeout = setTimeout(this.onTimeout, 20_000)
@@ -241,7 +237,7 @@ export class ChromeTab {
 
   badCodeError?: string
   badCodeStack?: string
-  badCode(msg: string, stack: string[]) {
+  badCode(msg: string, stack: string[]): void {
     this.changeState('badCode')
     this.badCodeError = msg
     this.badCodeStack = stack.join('\n')
@@ -254,11 +250,11 @@ export class ChromeTab {
     }
   }
 
-  async listTests() {
+  async listTests(): Promise<void> {
     // TODO clean up this typing
     const { result, exceptionDetails } = (await this._evaluate(
       `Latte.flatten().map(t => t.fullName)`
-    )) as { result: { value: string }; exceptionDetails: { message: string } }
+    )) as { result: { value: string[] }; exceptionDetails: { message: string } }
 
     // TODO there should be a way to encode listRequest in the types as non-nullable
     if (!this.listRequest) {
@@ -272,7 +268,7 @@ export class ChromeTab {
     this.listRequest.resolve(result.value)
   }
 
-  becomeIdle() {
+  becomeIdle(): void {
     this.changeState('idle')
     if (this.codeHash) this.hotReload()
     else if (this.test) this.run()
@@ -280,12 +276,15 @@ export class ChromeTab {
   }
 
   // Retries code that would be executed on the page if a couple common failure cases happen
-  async _retry<A>(cb: () => A): Promise<A | undefined> {
+  async _retry<A>(cb: () => Promise<A>): Promise<A | void> {
     try {
       return await cb()
     } catch (e) {
-      if (!(e instanceof Error)) return 
-      if (e.message.includes('Session closed') || e.message.includes('Zen.run is not a function')) {
+      if (!(e instanceof Error)) return
+      if (
+        e.message.includes('Session closed') ||
+        e.message.includes('Zen.run is not a function')
+      ) {
         const oldUrl = this.page.url()
         this.page = await this.browser.newPage()
         this.setupPage()
@@ -297,17 +296,19 @@ export class ChromeTab {
     }
   }
 
-  async reload() {
+  reload(): Promise<void> {
     this.changeState('loading')
-    this.timeout = setTimeout(this.onTimeout, 10 * 1000)
+    this.timeout = setTimeout(this.onTimeout, 10_000)
     this.codeHash = undefined
     this.requestMap = {}
     console.log(`[${this.id}] reloading`)
     // TODO navigate to the correct url, in case the test has changed our location
-    return await this._retry(() => this.page.reload())
+    return this._retry(async () => {
+      await this.page.reload()
+    })
   }
 
-  onTimeout = () => {
+  onTimeout = (): void => {
     if (this.state == 'running') {
       this.failTest('Chrome-level test timeout')
     } else if (this.state == 'hotReload') {
@@ -321,7 +322,7 @@ export class ChromeTab {
     this.reload()
   }
 
-  onMessageAdded(text: string) {
+  onMessageAdded(text: string): void {
     const register = (name: string, cb: (value?: unknown) => void) => {
       if (text.startsWith(name)) {
         const value = text.slice(name.length).trim()
@@ -345,11 +346,12 @@ export class ChromeTab {
       }
     })
     register('Zen.resizeWindow', (args) => {
-      this.resizeWindow(args)
+      if (!args || typeof args !== 'object') return
+      this.resizeWindow(args as { width: number; height: number })
     })
   }
 
-  failTest(error: string, stack = '') {
+  failTest(error: string, stack = ''): void {
     const result = { error, stack, fullName: this.test?.testName || '' }
 
     this.finishTest(result)
@@ -360,7 +362,7 @@ export class ChromeTab {
     stack?: string
     fullName: string
     log?: log
-  }) {
+  }): void {
     if (!this.startAt) {
       return this.resolveWork?.(null)
     }
@@ -378,36 +380,26 @@ export class ChromeTab {
     this.test = undefined
   }
 
-  onExceptionThrown(opts) {
-    let ex = opts.exceptionDetails,
-      message
+  onExceptionThrown(error: Error): void {
+    console.log(`[${this.id}]`, error.message, error.stack)
 
-    if (ex.exception && ex.exception.className)
-      message = `${ex.exception.className} ${
-        ex.exception.description.split('\n')[0]
-      }`
-    else if (ex.exception.value) message = ex.exception.value
-    else message = ex.text
-
-    let stack = (ex.stackTrace && ex.stackTrace.callFrames) || []
-    stack = stack.map((f) => `${f.functionName} ${f.url}:${f.lineNumber}`)
-    console.log(`[${this.id}]`, message, stack)
-
+    const stack = error.stack?.split('\n') || []
     // If an error happens while loading, your code is bad and we can't run anything
     if (this.state === 'loading') {
-      this.badCode(message, stack)
+      this.badCode(error.message, stack)
     }
-
     // Some test suites (ie Superhuman) throw random errors that don't actually fail the test promise.
     // I'd like to track these all down and fix, but until then let us silently ignore, like karma.
     // Since we don't know which exceptions are safe to ignore, just reload.
     else if (this.state === 'running' && this.config.failOnExceptions) {
-      this.failTest(message, stack.join('\n'))
+      this.failTest(error.message, stack.join('\n'))
       this.reload()
-    } else if (this.state == 'hotReload') this.reload()
+    } else if (this.state == 'hotReload') {
+      this.reload()
+    }
   }
 
-  onRequestPaused = async (request: Puppeteer.HTTPRequest) => {
+  onRequestPaused = async (request: Puppeteer.HTTPRequest): Promise<void> => {
     const gatewayUrl = process.env.GATEWAY_URL
     const requestUrl = request.url()
     const isToGateway = gatewayUrl && requestUrl.indexOf(gatewayUrl) >= 0
@@ -453,7 +445,7 @@ export class ChromeTab {
         await request.respond({
           status: 200,
           contentType: response.ContentType,
-          body
+          body,
         })
       } catch (e) {
         // There is a chance for a redirect or new tab while this s3 request is going through

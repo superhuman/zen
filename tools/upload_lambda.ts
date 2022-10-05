@@ -3,13 +3,18 @@ const AdmZip = require('adm-zip')
 const path = require('path')
 const esbuild = require('esbuild')
 
+type BundleConfig = {
+  bundle: boolean
+  external?: string[]
+}
+
 // Create a the zip file
 const zip = new AdmZip()
 const files = ['lambda.ts', 'chrome_wrapper.ts']
 files.forEach((file) => {
   const [basename, filetype] = file.split('.')
   // TODO make this use partial esbuild config
-  let bundleConfig: any = {
+  let bundleConfig: BundleConfig = {
     bundle: false,
   }
   if (file !== 'lambda') {
@@ -28,7 +33,9 @@ files.forEach((file) => {
   zip.addLocalFile(path.join(__dirname, `../build/lambda_code/${basename}.js`))
 })
 
-zip.writeZip(path.join(__dirname, '../build/lambda_code/lambda-code-timeout.zip'))
+zip.writeZip(
+  path.join(__dirname, '../build/lambda_code/lambda-code-timeout.zip')
+)
 
 const assetBucket = process.env.ASSET_BUCKET
 const secretAccessKey = process.env.SECRET_ACCESS_KEY

@@ -3,5 +3,6 @@
   "compileOptions": {
     "target": "node",
     "checkJs": true
-  }
+  },
+  "include": ["**/*"]
 }
