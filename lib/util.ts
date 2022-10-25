@@ -183,20 +183,8 @@ export async function workTests(
 
   // If there are timeouts, then keep calling workTests again with the unresolved tests
   if (timeoutTests.length > 0 && rerun) {
-    console.log('RERUNNING DUE TO LAMBDA TIMEOUT', timeoutTests)
-    await timeout(30_000)
-    // We don't want this going on endlessly, because there are other errors we may want to do work
-    const newResponse = await workTests(
-      zen,
-      { ...args, testNames: timeoutTests },
-      false
-    )
-    timeoutTests.forEach((test) => {
-      response.results[test] = [
-        ...response.results[test],
-        ...newResponse.results[test],
-      ]
-    })
+    console.log('Lambda timeouts, waiting 10s for them to hopefully cleanout!')
+    await timeout(10_000)
   }
 
   return response
