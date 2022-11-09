@@ -52,7 +52,9 @@ module.exports = class WebpackAdapter extends EventEmitter {
       })
     )
 
-    config.plugins.push(new webpack.NamedModulesPlugin())
+    if (!config.optimization) {
+      config.optimization = { moduleIds: 'named' }
+    }
     this.compiler = webpack(config)
 
     this.compiler.hooks.invalid.tap('Zen', () =>
@@ -90,14 +92,14 @@ module.exports = class WebpackAdapter extends EventEmitter {
     })
   }
 
-  startDevServer(server: Server) {
-    const devServer = new WebpackDevServer(this.compiler, {
-      stats: { errorDetails: true },
+  async startDevServer(server: Server) {
+    const options = {
+      ...this.compiler.options.devServer,
       hot: true,
-      inline: false,
-    })
+    }
+    const devServer = new WebpackDevServer(options, this.compiler)
 
-    // @ts-expect-error app does exist in this version of dev server
+    await devServer.start()
     server.use('/webpack', devServer.app)
   }
 
