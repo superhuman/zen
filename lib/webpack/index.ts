@@ -66,12 +66,12 @@ module.exports = class WebpackAdapter extends EventEmitter {
     this.compiler.hooks.failed.tap('Zen', (error: Error) =>
       this.onStateChange({ status: 'error', errors: [error] })
     )
-    this.compiler.hooks.done.tap('Zen', this.onStats.bind(this))
   }
 
   // TODO this will most likely break once webpack is updated
   // bundle has been removed from the types at this point
   addWebpackClient(config: any) {
+    console.log('=============== addWebpackClient', config)
     if (!config.entry.bundle) throw Error('Zen config requires an entry bundle')
 
     config.entry.bundle.push(path.join(__dirname, '../build/webpack-client.js'))
@@ -101,30 +101,6 @@ module.exports = class WebpackAdapter extends EventEmitter {
 
     await devServer.start()
     server.use('/webpack', devServer.app)
-  }
-
-  onStats(stats: Stats) {
-    const errors = (stats.compilation.errors || []).map((e) => {
-      return e.module ? `${e.module.id}: ${e.message}` : e.message
-    })
-
-    const state = Object.assign(stats, {
-      files: Object.keys(stats.compilation.assets).map((name) => {
-        const source = stats.compilation.assets[name].source()
-        return { path: `webpack/${name}`, body: source }
-      }),
-
-      entrypoints:
-        stats.compilation.entrypoints
-          .get('bundle')
-          ?.chunks.map((chunk: Chunk) => chunk.files.values().next().value) ||
-        [],
-
-      errors,
-      status: errors.length ? ('error' as const) : ('done' as const),
-    })
-
-    this.onStateChange(state)
   }
 
   onStateChange(state: state) {
