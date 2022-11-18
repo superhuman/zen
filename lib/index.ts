@@ -125,7 +125,11 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
       window.Zen = {config: ${JSON.stringify(cfg)}}
     </script>`)
 
-      return zen.config.htmlTemplate.replace('ZEN_SCRIPTS', scripts.join('\n'))
+      const html = zen.config.htmlTemplate.replace(
+        'ZEN_SCRIPTS',
+        scripts.join('\n')
+      )
+      return html
     },
   })
 
