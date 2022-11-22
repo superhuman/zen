@@ -422,10 +422,6 @@ export class ChromeTab {
     }
 
     if (!this.manifest || !isToGateway) {
-      console.log(`[${this.id}] continuing request to ${requestUrl}`)
-      console.log(`[${this.id}] manifest`, this.manifest)
-      console.log(`[${this.id}] gatewayUrl`, gatewayUrl)
-      console.log(`[${this.id}] isToGateway`, isToGateway)
       return defaultReturn()
     }
 
@@ -463,7 +459,6 @@ export class ChromeTab {
       } catch (e) {
         // There is a chance for a redirect or new tab while this s3 request is going through
         // if we try to fulfill a request that has been canceled chrome gets really angry
-        console.log(`[${this.id}] error fulfilling request`, e)
         console.error(e)
       }
     } else {
