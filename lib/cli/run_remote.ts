@@ -2,8 +2,12 @@ import { invoke, workTests } from '../util'
 import * as Profiler from '../profiler'
 import { Zen } from '../types'
 import { CLIOptions } from './index'
+import { encodeXML } from 'entities'
+import { writeFileSync } from 'fs'
+import { join } from 'path'
 
 type testFailure = {
+  resolved?: boolean
   fullName: string
   attempts: number
   error?: string
@@ -11,6 +15,29 @@ type testFailure = {
 }
 
 type TestResultsMap = Record<string, testFailure>
+
+function resultsToXML(results: TestResultsMap): string {
+  const failures = Object.values(results)
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="jest tests" tests="${failures.length}" failures="${
+    failures.length
+  }" time="0">
+
+${failures
+  .map((failure) => {
+    return `    <testcase name="${encodeXML(failure.fullName)}" time="${
+      failure.time
+    }">
+      <failure message="${encodeXML(failure.error || '')}"></failure>
+    </testcase>`
+  })
+  .join('\n')}
+  </testsuite>
+</testsuites>`
+  return xml
+}
 
 async function runTests(
   zen: Zen,
@@ -88,7 +115,7 @@ function combineFailures(
   // Reset the error state for all the previous tests, that way if they
   // succeed it will report only as a flake
   for (const testName in failures) {
-    failures[testName].error = undefined
+    failures[testName].resolved = true
   }
 
   for (const testName in currentFailures) {
@@ -96,10 +123,14 @@ function combineFailures(
     const curFailure = currentFailures[testName]
 
     if (!prevFailure) {
-      failures[testName] = curFailure
+      failures[testName] = {
+        ...curFailure,
+        resolved: false,
+      }
     } else {
       failures[testName] = {
         ...prevFailure,
+        resolved: false,
         error: curFailure.error,
         time: prevFailure.time + curFailure.time,
         attempts: prevFailure.attempts + curFailure.attempts,
@@ -207,6 +238,12 @@ export default async function runRemote(
         failCount === 1 ? '' : 's'
       }`
     )
+    if (opts.junit && failures) {
+      const xml = resultsToXML(failures)
+
+      writeFileSync(join(process.cwd(), opts.junit), xml)
+    }
+
     process.exit(failCount ? 1 : 0)
   } catch (e) {
     console.error(e)

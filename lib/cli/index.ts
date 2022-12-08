@@ -1,5 +1,7 @@
+#!/usr/bin/env node
+
 // @ts-expect-error server is not typed
-import Server from './server'
+import Server from '../server'
 import initZen from '../index'
 import yargs from 'yargs'
 import runRemote from './run_remote'
@@ -9,6 +11,7 @@ export type CLIOptions = {
   maxAttempts: number
   debug: boolean
   configFile: string
+  junit: string
 }
 
 yargs(process.argv.slice(2))
@@ -47,4 +50,5 @@ yargs(process.argv.slice(2))
     logging: { type: 'boolean', default: false },
     maxAttempts: { type: 'number', default: 3 },
     debug: { type: 'boolean', default: false },
+    junit: { type: 'string', default: '' },
   }).argv
