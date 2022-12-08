@@ -400,9 +400,18 @@ export class ChromeTab {
   }
 
   onRequestPaused = async (request: Puppeteer.HTTPRequest): Promise<void> => {
-    const gatewayUrl = process.env.GATEWAY_URL
+    let gatewayUrl = process.env.GATEWAY_URL
     const requestUrl = request.url()
-    const isToGateway = gatewayUrl && requestUrl.indexOf(gatewayUrl) >= 0
+    let isToGateway = gatewayUrl && requestUrl.indexOf(gatewayUrl) >= 0
+
+    // Temporary workaround
+    // Remove the pub from the end of the gateway url to make it
+    // work on heads that don't have the pub in the url
+    // TODO figure out why this is happening...
+    if (!isToGateway) {
+      gatewayUrl = gatewayUrl?.replace('/pub', '')
+      isToGateway = gatewayUrl && requestUrl.indexOf(gatewayUrl) >= 0
+    }
 
     const defaultReturn = async () => {
       try {

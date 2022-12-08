@@ -11,6 +11,7 @@ type WorkTestOpts = {
   deflakeLimit?: number
   runId: string
   oldResults?: WorkTestsResult
+  sessionId: string
 }
 export type WorkTestsResult = {
   results: Record<string, TestResult[]>
@@ -60,7 +61,7 @@ export const workTests = async (
     }
 
     const run = async () => {
-      const tab = await prepareChrome({ sessionId: '' })
+      const tab = await prepareChrome({ sessionId: opts.sessionId })
       const deflakeLimit = opts.deflakeLimit || 3
       for (let attempt = 1; attempt <= deflakeLimit; attempt++) {
         const remainingTests = getRemainingTests()
@@ -214,7 +215,6 @@ async function getManifest(sessionId: string) {
     manifest.files.forEach(
       (f) => (manifest.fileMap[f.urlPath] = f.versionedPath)
     )
-    console.log(manifest)
     manifest.assetUrl = `https://s3-${process.env.AWS_REGION}.amazonaws.com/${bucket}`
     return manifest
   } catch (e) {
