@@ -241,10 +241,12 @@ export default async function runRemote(
     if (opts.junit && failures) {
       const xml = resultsToXML(failures)
 
+      console.log('Writing results to ' + opts.junit)
       writeFileSync(join(process.cwd(), opts.junit), xml)
+      process.exit(0)
+    } else {
+      process.exit(failCount ? 1 : 0)
     }
-
-    process.exit(failCount ? 1 : 0)
   } catch (e) {
     console.error(e)
     process.exit(1)
