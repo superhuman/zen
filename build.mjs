@@ -1,6 +1,8 @@
-const esbuild = require('esbuild')
-const yargs = require('yargs')
-const { nodeExternalsPlugin } = require('esbuild-node-externals')
+/*eslint-env node*/
+
+import { build } from 'esbuild'
+import yargs from 'yargs'
+import { nodeExternalsPlugin } from 'esbuild-node-externals'
 
 const argv = yargs(process.argv)
   .alias('w', 'watch')
@@ -17,30 +19,26 @@ if (argv.watch) {
 }
 
 // // Build the CLI
-esbuild
-  .build({
-    entryPoints: ['lib/cli.ts'],
-    outfile: 'build/cli.js',
-    bundle: true,
-    platform: 'node',
-    plugins: [nodeExternalsPlugin()],
-    watch,
-    external: ['chrome-aws-lambda', 'puppeteer-core'],
-  })
-  .catch(() => process.exit(1))
+build({
+  entryPoints: ['lib/cli.ts'],
+  outfile: 'build/cli.js',
+  bundle: true,
+  platform: 'node',
+  plugins: [nodeExternalsPlugin()],
+  watch,
+  external: ['chrome-aws-lambda', 'puppeteer-core'],
+}).catch(() => process.exit(1))
 
 function buildSimpleFile(file, outfile, platform = 'browser') {
-  esbuild
-    .build({
-      entryPoints: [file],
-      outfile: `build/${outfile}.js`,
-      platform,
-      bundle: true,
-      plugins: [nodeExternalsPlugin()],
-      external: ['chrome-aws-lambda', 'puppeteer-core'],
-      watch,
-    })
-    .catch(() => process.exit(1))
+  build({
+    entryPoints: [file],
+    outfile: `build/${outfile}.js`,
+    platform,
+    bundle: true,
+    plugins: [nodeExternalsPlugin()],
+    external: ['chrome-aws-lambda', 'puppeteer-core'],
+    watch,
+  }).catch(() => process.exit(1))
 }
 
 buildSimpleFile('lib/webpack/webpack-client.ts', 'webpack-client', 'node')

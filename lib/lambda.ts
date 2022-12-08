@@ -65,7 +65,6 @@ export const workTests = async (
       const deflakeLimit = opts.deflakeLimit || 3
       for (let attempt = 1; attempt <= deflakeLimit; attempt++) {
         const remainingTests = getRemainingTests()
-        console.log('REMAINING TESTS', remainingTests)
         if (remainingTests.length === 0) break
 
         await runTestSet(remainingTests, tab)
@@ -104,7 +103,6 @@ export const workTests = async (
           time: 0, // TODO figure out a good way to get time
         })
       } else {
-        console.log('UNKOWN ERROR')
         console.error(e)
       }
     }
@@ -129,7 +127,6 @@ export const sync = async (
 ): Promise<{ needed: File[] }> => {
   if (!process.env.ASSET_BUCKET) throw new Error('ASSET_BUCKET not set')
   const bucket = process.env.ASSET_BUCKET
-  console.log('bucket', bucket)
   const s3 = new AWS.S3({ params: { Bucket: bucket } })
 
   // Write the updated session manifest to S3
@@ -145,17 +142,15 @@ export const sync = async (
   // to check, and S3 is pruned to have less than 2k files. Blame this comment for an example.
   const needed: File[] = []
   const toCheck = manifest.files.filter((f) => f.toCheck)
-  console.log(`Checking ${toCheck.length} files`)
   await Promise.all(
     toCheck.map(async (f) => {
       try {
-        const resp = await s3
+        await s3
           .headObject({
             Bucket: bucket,
             Key: f.versionedPath,
           })
           .promise()
-        console.log('Found', f.versionedPath, resp)
       } catch (e) {
         if (e instanceof Error) {
           const error = e as AWS.AWSError
@@ -169,7 +164,6 @@ export const sync = async (
   )
 
   await manifestWrite
-  console.log('Manifest written')
   return { needed }
 }
 
@@ -187,7 +181,6 @@ async function prepareChrome({ sessionId }: { sessionId: string }) {
     console.log('Chrome is already setup!')
   }
 
-  console.log('Opening tab')
   return await wrapper.openTab(
     process.env.GATEWAY_URL + '/index.html',
     sessionId,
@@ -218,7 +211,7 @@ async function getManifest(sessionId: string) {
     manifest.assetUrl = `https://s3-${process.env.AWS_REGION}.amazonaws.com/${bucket}`
     return manifest
   } catch (e) {
-    console.log(e)
+    console.error('Error getting manifest: ', e)
     return null
   }
 }
