@@ -20,7 +20,7 @@ if (argv.watch) {
 
 // // Build the CLI
 build({
-  entryPoints: ['lib/cli.ts'],
+  entryPoints: ['lib/cli/index.ts'],
   outfile: 'build/cli.js',
   bundle: true,
   platform: 'node',
