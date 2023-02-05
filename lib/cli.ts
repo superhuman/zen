@@ -164,6 +164,7 @@ async function run(zen: Zen, opts: CLIOptions) {
   try {
     let t0 = Date.now()
     if (zen.webpack) {
+      // this is where the assets would get passed
       console.log('Webpack building')
       let previousPercentage = 0
       zen.webpack.on(

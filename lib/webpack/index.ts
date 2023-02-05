@@ -40,7 +40,7 @@ module.exports = class WebpackAdapter extends EventEmitter {
     this.addWebpackClient(config)
 
     if (!config.plugins) config.plugins = []
-    config.plugins.push(new webpack.HotModuleReplacementPlugin())
+    config.plugins.push(sgnew webpack.HotModuleReplacementPlugin())
     config.plugins.push(
       new webpack.ProgressPlugin((pct, message) => {
         if (pct > 0 && pct < 1)

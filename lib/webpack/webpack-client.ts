@@ -21,7 +21,9 @@ async function update(): Promise<ModuleId[]> {
     // @ts-expect-error we are using an out of date version of webpack
     module.hot.check(true, (err, outdatedModules) => {
       if (!err) {
+
         location.reload()
+        // does this even run? since we location reload
         resolve(outdatedModules)
       } else {
         reject(err)

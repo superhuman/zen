@@ -43,6 +43,7 @@ function buildSimpleFile(file, outfile, platform = 'browser') {
     .catch(() => process.exit(1))
 }
 
+// Compiles the webpack client from ts. Remove
 buildSimpleFile('lib/webpack/webpack-client.ts', 'webpack-client', 'node')
 buildSimpleFile('lib/latte.ts', 'latte')
 buildSimpleFile('lib/worker.js', 'worker')
