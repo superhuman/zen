@@ -40,7 +40,7 @@ module.exports = class WebpackAdapter extends EventEmitter {
     this.addWebpackClient(config)
 
     if (!config.plugins) config.plugins = []
-    config.plugins.push(sgnew webpack.HotModuleReplacementPlugin())
+    config.plugins.push(new webpack.HotModuleReplacementPlugin())
     config.plugins.push(
       new webpack.ProgressPlugin((pct, message) => {
         if (pct > 0 && pct < 1)
@@ -72,6 +72,7 @@ module.exports = class WebpackAdapter extends EventEmitter {
   addWebpackClient(config: any) {
     if (!config.entry.bundle) throw Error('Zen config requires an entry bundle')
 
+    // this is added
     config.entry.bundle.push(path.join(__dirname, '../build/webpack-client.js'))
   }
 

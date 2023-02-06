@@ -163,23 +163,6 @@ function combineFailures(
 async function run(zen: Zen, opts: CLIOptions) {
   try {
     let t0 = Date.now()
-    if (zen.webpack) {
-      // this is where the assets would get passed
-      console.log('Webpack building')
-      let previousPercentage = 0
-      zen.webpack.on(
-        'status',
-        (_status: string, stats: { message: string; percentage: number }) => {
-          if (stats.percentage && stats.percentage > previousPercentage) {
-            previousPercentage = stats.percentage
-            console.log(`${stats.percentage}% ${stats.message}`)
-          }
-        }
-      )
-      await zen.webpack.build()
-      console.log(`Took ${Date.now() - t0}ms`)
-    }
-
     t0 = Date.now()
     console.log('Syncing to S3')
     zen.s3Sync.on(

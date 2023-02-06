@@ -201,3 +201,22 @@ export async function workTests(
 
   return response
 }
+
+export async function getFilePathsRecursively (directory) {
+  const files = []
+
+  function run (directory) {
+    const filesInDirectory = fs.readdirSync(directory);
+    for (const file of filesInDirectory) {
+      const absolute = path.join(directory, file);
+      if (fs.statSync(absolute).isDirectory()) {
+        run(absolute);
+      } else {
+        files.push(absolute);
+      }
+    }
+  }
+
+  run(directory)
+  return files
+};

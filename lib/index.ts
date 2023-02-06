@@ -6,8 +6,6 @@ import * as AWS from 'aws-sdk'
 import S3Sync from './s3-sync'
 import Journal from './journal'
 import { v4 as uuidv4 } from 'uuid'
-// @ts-expect-error(7016) webpack is any
-import WebpackAdapter from './webpack'
 import type { Zen, Config } from './types'
 
 require('sugar').extend()
@@ -59,16 +57,10 @@ async function createConfig(configFilePath: string): Promise<Config> {
 export default async function initZen(configFilePath: string): Promise<Zen> {
   const config = await createConfig(configFilePath)
 
-  let webpack
-  if (config.webpack) {
-    // boot up webpack (if configured)
-    webpack = new WebpackAdapter(config.webpack)
-  }
-
   // Create a partial Zen, with enought to work for s3Sync
   // TODO setup order to make more sense
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ;(global as any).Zen = { config, webpack }
+  ;(global as any).Zen = { config }
 
   AWS.config.update(config.aws)
   ensureDir(config.tmpDir)
@@ -76,7 +68,6 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const zen: Zen = ((global as any).Zen = {
     config,
-    webpack,
     s3Sync: new S3Sync(),
     lambda: new AWS.Lambda(),
     journal: new Journal(config),
@@ -92,11 +83,9 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
         )
       }
       deps.push(`build/${pageType}.js`) // after Zen dependencies, but before user code
-      const entries =
-        (zen.webpack &&
-          zen.webpack.compile &&
-          zen.webpack.compile.entrypoints) ||
-        []
+
+      // here this could maybe be decoupled a bit more
+      const entries = Zen.config.webpack.entrypoints || []
 
       if (forS3) {
         deps.push(
