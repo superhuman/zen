@@ -125,7 +125,9 @@ export function ensureDir(dir: string): void {
 }
 
 function isRetryableError(error: Error) {
-  return error.message.includes('Rate Exceeded.')
+  const errors = ['Rate Exceeded', 'Execution context was destroyed']
+
+  return errors.some((e) => error.message.includes(e))
 }
 
 function timeout(ms: number): Promise<void> {
@@ -135,39 +137,28 @@ function timeout(ms: number): Promise<void> {
 export async function invoke(
   zen: Zen,
   name: string,
-  args: unknown,
-  retry = 3
+  args: unknown
 ): Promise<unknown> {
-  try {
-    const result = await zen.lambda
-      .invoke({ FunctionName: name, Payload: JSON.stringify(args) })
-      .promise()
+  const result = await zen.lambda
+    .invoke({ FunctionName: name, Payload: JSON.stringify(args) })
+    .promise()
 
-    if (result.StatusCode != 200 || !result.Payload) throw result
+  if (result.StatusCode != 200 || !result.Payload) throw result
 
-    // @ts-expect-error This appears to work :shrug:, it is not worth fixing until real changes here
-    const payload = JSON.parse(result.Payload)
+  // @ts-expect-error This appears to work :shrug:, it is not worth fixing until real changes here
+  const payload = JSON.parse(result.Payload)
 
-    if (payload.errorMessage) {
-      const err = new Error(payload.errorMessage)
-      throw err
-    }
-    return payload
-  } catch (e) {
-    if (retry > 0 && e instanceof Error && isRetryableError(e)) {
-      // 10s is arbitrary but hopefully it gives time for things like rate-limiting to resolve
-      await timeout(10_000)
-      return invoke(zen, name, args, retry - 1)
-    }
-
-    throw e
+  if (payload.errorMessage) {
+    const err = new Error(payload.errorMessage)
+    throw err
   }
+  return payload
 }
 
 export async function workTests(
   zen: Zen,
   args: { deflakeLimit: number; testNames: string[]; sessionId: string },
-  rerun = true
+  rerun = false
 ): Promise<WorkTestsResult> {
   const response = (await invoke(
     zen,
@@ -183,7 +174,7 @@ export async function workTests(
 
   // If there are timeouts, then keep calling workTests again with the unresolved tests
   if (timeoutTests.length > 0 && rerun) {
-    console.log('RERUNNING DUE TO LAMBDA TIMEOUT', timeoutTests)
+    console.log('RERUNNING DUE TO LAMBDA TIMEOUT')
     await timeout(30_000)
     // We don't want this going on endlessly, because there are other errors we may want to do work
     const newResponse = await workTests(

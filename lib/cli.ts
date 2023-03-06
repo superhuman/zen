@@ -6,14 +6,7 @@ import initZen from './index'
 import yargs from 'yargs'
 import { invoke, workTests } from './util'
 import * as Profiler from './profiler'
-import { Zen } from './types'
-
-type testFailure = {
-  fullName: string
-  attempts: number
-  error?: string
-  time: number
-}
+import { TestResultCollection, Zen } from './types'
 
 export type CLIOptions = {
   logging: boolean
@@ -60,85 +53,118 @@ yargs(process.argv.slice(2))
     debug: { type: 'boolean', default: false },
   }).argv
 
-type TestResultsMap = Record<string, testFailure>
-
 async function runTests(
   zen: Zen,
   opts: CLIOptions,
   tests: string[]
-): Promise<TestResultsMap> {
-  const groups = zen.journal.groupTests(tests, zen.config.lambdaConcurrency)
-  type failedTest = testFailure & { logStream: string }
-
-  const failedTests: failedTest[][] = await Promise.all(
-    groups.map(async (group: { tests: string[] }): Promise<failedTest[]> => {
-      try {
-        const response = await workTests(zen, {
-          deflakeLimit: opts.maxAttempts,
-          testNames: group.tests,
-          sessionId: zen.config.sessionId,
-        })
-        const logStreamName = response.logStreamName
-
-        // Map back to the old representation and fill in any tests that may have not run
-        const results = group.tests.map((test) => {
-          const results = response.results[test] || []
-          const result = results.at(-1)
-
-          if (!result) {
-            console.log(test, response.results, results)
-            return {
-              fullName: test,
-              attempts: 0,
-              error: 'Failed to run on remote!',
-              time: 0,
-              logStream: logStreamName,
-            }
-          } else {
-            return {
-              ...result,
-              logStream: logStreamName,
-              attempts: results.length,
-            }
-          }
-        })
-
-        return results.filter((r: testFailure) => r.error || r.attempts > 1)
-      } catch (e) {
-        console.error(e)
-        return group.tests.map((name: string) => {
-          return {
-            fullName: name,
-            attempts: 0,
-            error: 'zen failed to run this group',
-            time: 0,
-            logStream: '',
-          }
-        })
-      }
-    })
+): Promise<TestResultCollection> {
+  const groups = zen.journal.groupTestsWithDuplication(
+    tests,
+    zen.config.lambdaConcurrency
   )
 
-  return failedTests
-    .flat()
-    .reduce((acc: Record<string, testFailure>, result: testFailure) => {
-      acc[result.fullName] = result
+  const testResultGroups: TestResultCollection[] = await Promise.all(
+    groups.map(
+      async (group: { tests: string[] }): Promise<TestResultCollection> => {
+        const testNames = group.tests
+        try {
+          const response = await workTests(zen, {
+            deflakeLimit: opts.maxAttempts,
+            sessionId: zen.config.sessionId,
+            testNames,
+          })
+          const logStream = response.logStreamName
+
+          // Map back to the old representation and fill in any tests that may have not run
+          const results = testNames.reduce<TestResultCollection>(
+            (col, fullName) => {
+              const results = response.results[fullName] || []
+              let success = true
+              if (results.length === 0) {
+                success = false
+              } else if (results.at(-1)?.error) {
+                success = false
+              }
+
+              col[fullName] = {
+                fullName: fullName,
+                logStream,
+                success,
+                results,
+              }
+
+              return col
+            },
+            {}
+          )
+
+          return results
+        } catch (e) {
+          let message = 'Failed to run on remote!'
+          if (e instanceof Error) message = e.message
+
+          return testNames.reduce<TestResultCollection>((col, fullName) => {
+            col[fullName] = {
+              fullName,
+              logStream: '',
+              success: false,
+              results: [
+                {
+                  fullName,
+                  error: message,
+                  time: 0,
+                },
+              ],
+            }
+
+            return col
+          }, {})
+        }
+      }
+    )
+  )
+
+  const testResults = testResultGroups.reduce<TestResultCollection>(
+    (acc, results) => {
+      for (const testName in results) {
+        if (acc[testName]) {
+          acc[testName].results = acc[testName].results.concat(
+            results[testName].results
+          )
+          // If the test has ever succeeded, then it is a success
+          acc[testName].success =
+            acc[testName].success || results[testName].success
+        } else {
+          acc[testName] = results[testName]
+        }
+      }
       return acc
-    }, {})
+    },
+    {}
+  )
+
+  const testErrors: TestResultCollection = {}
+  for (const testName in testResults) {
+    const result = testResults[testName]
+    if (!result.success) {
+      testErrors[testName] = result
+    }
+  }
+
+  return testErrors
 }
 
 function combineFailures(
-  currentFailures: TestResultsMap,
-  previousFailures?: TestResultsMap
-): TestResultsMap {
+  currentFailures: TestResultCollection,
+  previousFailures?: TestResultCollection
+): TestResultCollection {
   if (!previousFailures) return currentFailures
 
   // Combine the current failures with the previous failures
   const failures = { ...previousFailures }
-  // Reset the error state for all the previous tests, that way if they
-  // succeed it will report only as a flake
+  // Reset the success flag, if they are not being added to that means they succeded
   for (const testName in failures) {
-    failures[testName].error = undefined
+    failures[testName].success = true
   }
 
   for (const testName in currentFailures) {
@@ -150,9 +176,8 @@ function combineFailures(
     } else {
       failures[testName] = {
         ...prevFailure,
-        error: curFailure.error,
-        time: prevFailure.time + curFailure.time,
-        attempts: prevFailure.attempts + curFailure.attempts,
+        results: prevFailure.results.concat(curFailure.results),
+        success: false,
       }
     }
   }
@@ -201,7 +226,7 @@ async function run(zen: Zen, opts: CLIOptions) {
 
     // In case there is an infinite loop, this should brick the test running
     let runsLeft = 5
-    let failures: TestResultsMap | undefined
+    let failures: TestResultCollection | undefined
     console.log(`Running ${workingSet.length} tests`)
     while (runsLeft > 0 && workingSet.length > 0) {
       runsLeft--
@@ -213,7 +238,7 @@ async function run(zen: Zen, opts: CLIOptions) {
       for (const testName in failures) {
         const failure = failures[testName]
         if (!failure) continue
-        if (failure.error && failure.attempts < opts.maxAttempts) {
+        if (!failure.success && failure.results.length < opts.maxAttempts) {
           testsToContinue.push(failure.fullName)
         }
       }
@@ -222,32 +247,24 @@ async function run(zen: Zen, opts: CLIOptions) {
         console.log(`Trying to rerun ${workingSet.length} tests`)
     }
 
-    const metrics = []
     let failCount = 0
     for (const test of Object.values(failures || {})) {
-      metrics.push({
-        name: 'log.test_failed',
-        fields: {
-          value: test.attempts,
-          testName: test.fullName,
-          time: test.time,
-          error: test.error,
-        },
-      })
+      const lastResult = test.results.at(-1)
+      const attempts = test.results.length || 1
+      if (!lastResult) continue
 
-      if (test.error) {
+      if (lastResult.error) {
         failCount += 1
         console.log(
-          `🔴 ${test.fullName} ${test.error} (tried ${
-            test.attempts || 1
+          `🔴 ${test.fullName} ${lastResult.error} (tried ${
+            attempts || 1
           } times)`
         )
-      } else if (test.attempts > 1) {
-        console.log(`⚠️ ${test.fullName} (flaked ${test.attempts - 1}x)`)
+      } else if (test.results.length > 1) {
+        console.log(`⚠️ ${test.fullName} (flaked ${attempts - 1}x)`)
       }
     }
 
-    if (opts.logging) Profiler.logBatch(zen, metrics)
     console.log(`Took ${Date.now() - t0}ms`)
     console.log(
       `${failCount ? '😢' : '🎉'} ${failCount} failed test${
