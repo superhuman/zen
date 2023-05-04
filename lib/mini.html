@@ -1,4 +1,10 @@
-<div class="mini">
+<div
+  class="mini"
+  class:moving="moving"
+  ref:mini
+  on:mousedown="onMouseDown()"
+  style="left: {left}; top: {top}"
+>
   <div class="runDetails">
     {#if $socketDisconnected} Disconnected (check server and reload) {:elseif
     $workingSetLength || $grep}
@@ -60,14 +66,13 @@
   </div>
 </div>
 
+<svelte:window on:mouseup="onMouseUp()" on:mousemove="onMouseMove(event)" />
+
 <style>
   .mini {
     all: initial;
     position: fixed;
-    bottom: 0;
     width: 400px;
-    left: 50%;
-    margin-left: -200px;
     padding: 8px 5px 4px 5px;
     border: 1px solid #ddd;
     background: #fff;
@@ -76,6 +81,11 @@
       'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
     z-index: 9999;
     overflow: hidden;
+    cursor: grab;
+  }
+
+  .mini.moving {
+    cursor: grabbing;
   }
 
   .mini > div {
@@ -185,6 +195,51 @@
   }
 
   export default {
+    oncreate() {
+      // set left and bottom as px
+      const { left, top, height } = this.refs.mini.getBoundingClientRect()
+      this.set({
+        left: `${window.innerWidth / 2 - 200}px`,
+        top: `${window.innerHeight - height}px`,
+      })
+    },
+    data() {
+      return {
+        moving: false,
+        top: '0',
+        left: '0',
+      }
+    },
+    methods: {
+      onMouseDown() {
+        this.set({ moving: true })
+      },
+      onMouseUp() {
+        this.set({ moving: false })
+      },
+      onMouseMove(e) {
+        const { moving } = this.get()
+        const { left, top, width, height } =
+          this.refs.mini.getBoundingClientRect()
+
+        if (moving) {
+          // constrain element horizontally within window
+          const newLeft = Math.min(
+            Math.max(left + e.movementX, 0),
+            window.innerWidth - width
+          )
+          // constrain element vertically within window
+          const newTop = Math.min(
+            Math.max(top + e.movementY, 0),
+            window.innerHeight - height
+          )
+          this.set({
+            left: `${newLeft}px`,
+            top: `${newTop}px`,
+          })
+        }
+      },
+    },
     computed: {},
     helpers: { groupClasses },
   }
