@@ -1,3 +1,8 @@
+# 2022-5-5 0.3.19
+
+- Fix eslint environment issues
+- Make Zen bottom status bar movable
+
 # 2022-5-26 0.3.17
 
 - Update Util.writeFile (#27)
