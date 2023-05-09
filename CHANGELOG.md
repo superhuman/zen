@@ -1,3 +1,7 @@
+# 2022-5-5 0.3.20
+
+- Fix Zen AWS S3 upload sync flakiness
+
 # 2022-5-5 0.3.19
 
 - Fix eslint environment issues
