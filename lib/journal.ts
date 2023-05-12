@@ -44,6 +44,26 @@ export default class Journal {
     }
   }
 
+  groupTestsWithDuplication(
+    tests: string[],
+    concurrency: number
+  ): { time: number; tests: string[] }[] {
+    let groups = this.groupTests(tests, concurrency)
+    // Take every group and add their content to anther group,
+    // this will help incase a single group fails due to a timeout
+    // or some other issue.
+    groups = groups.map((group, i) => {
+      const groupB = groups[(i + 1) % groups.length]
+      const groupC = groups[(i + 2) % groups.length]
+      return {
+        time: group.time + groupB.time + groupC.time,
+        tests: [...group.tests, ...groupB.tests, ...groupC.tests],
+      }
+    })
+
+    return groups
+  }
+
   groupTests(
     tests: string[],
     concurrency: number

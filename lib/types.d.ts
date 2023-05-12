@@ -13,6 +13,16 @@ export type TestResult = {
   log?: log
 }
 
+export type TestResultCollection = Record<
+  string,
+  {
+    results: TestResult[]
+    fullName: string
+    logStream?: string
+    success: boolean
+  }
+>
+
 export type Config = {
   log?: (metrics: metric[]) => Promise<void>
   appRoot: string
