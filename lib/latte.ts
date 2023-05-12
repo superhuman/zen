@@ -164,7 +164,6 @@ declare global {
       try {
         for (const test of tests) {
           if (!test.fn) continue
-          console.log(`${test.fullName}`)
           Latte.currentTest = test
           whenCurrentTestFinished = new RealPromise(
             (res) => (currentTestResolve = res)

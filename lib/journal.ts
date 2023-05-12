@@ -30,7 +30,6 @@ export default class Journal {
       entry.tPass = test.time
     }
 
-    if (test.time > 2000) console.log(`{${test.time}} - ${test.fullName}`)
     this.lazyFlush()
   }
 

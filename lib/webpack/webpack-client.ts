@@ -1,6 +1,4 @@
 module.hot?.accept((err) => {
-  // TODO I think this might be the source of refresh looping
-  console.log('LOOPING')
   if (err) location.reload()
 })
 

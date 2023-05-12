@@ -1,66 +1,43 @@
-#!/usr/bin/env node
-
-// @ts-expect-error server is not typed
-import Server from './server'
-import initZen from './index'
-import yargs from 'yargs'
-import { invoke, workTests } from './util'
-import * as Profiler from './profiler'
-import { Zen } from './types'
+import { invoke, workTests } from '../util'
+import * as Profiler from '../profiler'
+import { Zen } from '../types'
+import { CLIOptions } from './index'
+import { encodeXML } from 'entities'
+import { writeFileSync } from 'fs'
+import { join } from 'path'
 
 type testFailure = {
+  resolved?: boolean
   fullName: string
   attempts: number
   error?: string
   time: number
 }
 
-export type CLIOptions = {
-  logging: boolean
-  maxAttempts: number
-  debug: boolean
-  configFile: string
-}
-
-yargs(process.argv.slice(2))
-  .usage('$0 <cmd> [configFile]')
-  .command(
-    ['local [configFile]', 'server [configFile]'],
-    'Run zen with a local server',
-    // @ts-expect-error yargs changed their type def but this pattern still works
-    (yargs: yargs.Argv) => {
-      yargs.positional('file', {
-        type: 'string',
-        describe: 'Path to the config file',
-      })
-    },
-    async (argv: CLIOptions) => {
-      await initZen(argv.configFile)
-      new Server()
-    }
-  )
-  .command(
-    'remote [configFile]',
-    'Run zen in the console',
-    // @ts-expect-error yargs changed their type def but this pattern still works
-    (yargs: yargs.Argv) => {
-      yargs.positional('file', {
-        type: 'string',
-        describe: 'Path to the config file',
-      })
-    },
-    async (argv: CLIOptions) => {
-      const zen = await initZen(argv.configFile)
-      run(zen, argv)
-    }
-  )
-  .options({
-    logging: { type: 'boolean', default: false },
-    maxAttempts: { type: 'number', default: 3 },
-    debug: { type: 'boolean', default: false },
-  }).argv
-
 type TestResultsMap = Record<string, testFailure>
+
+function resultsToXML(results: TestResultsMap): string {
+  const failures = Object.values(results)
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="jest tests" tests="${failures.length}" failures="${
+    failures.length
+  }" time="0">
+
+${failures
+  .map((failure) => {
+    return `    <testcase name="${encodeXML(failure.fullName)}" time="${
+      failure.time
+    }">
+      <failure message="${encodeXML(failure.error || '')}"></failure>
+    </testcase>`
+  })
+  .join('\n')}
+  </testsuite>
+</testsuites>`
+  return xml
+}
 
 async function runTests(
   zen: Zen,
@@ -138,7 +115,7 @@ function combineFailures(
   // Reset the error state for all the previous tests, that way if they
   // succeed it will report only as a flake
   for (const testName in failures) {
-    failures[testName].error = undefined
+    failures[testName].resolved = true
   }
 
   for (const testName in currentFailures) {
@@ -146,10 +123,14 @@ function combineFailures(
     const curFailure = currentFailures[testName]
 
     if (!prevFailure) {
-      failures[testName] = curFailure
+      failures[testName] = {
+        ...curFailure,
+        resolved: false,
+      }
     } else {
       failures[testName] = {
         ...prevFailure,
+        resolved: false,
         error: curFailure.error,
         time: prevFailure.time + curFailure.time,
         attempts: prevFailure.attempts + curFailure.attempts,
@@ -160,7 +141,10 @@ function combineFailures(
   return failures
 }
 
-async function run(zen: Zen, opts: CLIOptions) {
+export default async function runRemote(
+  zen: Zen,
+  opts: CLIOptions
+): Promise<void> {
   try {
     let t0 = Date.now()
     if (zen.webpack) {
@@ -254,7 +238,15 @@ async function run(zen: Zen, opts: CLIOptions) {
         failCount === 1 ? '' : 's'
       }`
     )
-    process.exit(failCount ? 1 : 0)
+    if (opts.junit && failures) {
+      const xml = resultsToXML(failures)
+
+      console.log('Writing results to ' + opts.junit)
+      writeFileSync(join(process.cwd(), opts.junit), xml)
+      process.exit(0)
+    } else {
+      process.exit(failCount ? 1 : 0)
+    }
   } catch (e) {
     console.error(e)
     process.exit(1)
