@@ -522,6 +522,8 @@ export default class ChromeWrapper {
 
     const browser = await this.browser
     const page = await browser.newPage()
+    await page.setDefaultNavigationTimeout(0)
+
     const tab = new ChromeTab(browser, page, id, config, manifest, this.s3)
 
     // TODO clean up order, right now it makes tab before goto to make the url stuff work properly

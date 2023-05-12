@@ -1,13 +1,18 @@
-# 2022-5-5 0.3.20
+# 2023-05-15 0.3.21
+
+- Fix Zen test timeout issues
+- Constrain Zen bottom status bar to move only horizontally
+
+# 2023-05-05 0.3.20
 
 - Fix Zen AWS S3 upload sync flakiness
 
-# 2022-5-5 0.3.19
+# 2023-05-05 0.3.19
 
 - Fix eslint environment issues
 - Make Zen bottom status bar movable
 
-# 2022-5-26 0.3.17
+# 2022-05-26 0.3.17
 
 - Update Util.writeFile (#27)
 
