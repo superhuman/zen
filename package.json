@@ -36,16 +36,20 @@
     "aws-sdk": "^2.238.1",
     "btoa": "^1.2.1",
     "connect": "^3.6.1",
+    "crypto-browserify": "^3.12.0",
     "fuzzysort": "^1.1.4",
     "klaw": "^2.1.1",
     "mime-types": "^2.1.17",
     "node-fetch": "^2.3.0",
+    "path-browserify": "^1.0.1",
     "puppeteer": "^16.0.0",
     "puppeteer-core": "^15.5.0",
     "serve-static": "^1.12.2",
+    "source-map-support": "^0.5.21",
+    "stream-browserify": "^3.0.0",
     "sugar": "^2.0.4",
     "svelte": "2.16.1",
-    "uuid": "^3.3.2",
+    "uuid": "^9",
     "ws": "^8.8.1",
     "yargs": "^17.1.1"
   },
@@ -56,8 +60,8 @@
     "@types/node": "^16.11.1",
     "@types/node-fetch": "^2.6.2",
     "@types/uuid": "^8.3.4",
-    "@types/webpack": "^4.41.31",
-    "@types/webpack-dev-server": "^3",
+    "@types/webpack": "^5",
+    "@types/webpack-dev-server": "^4",
     "@types/webpack-env": "^1.16.3",
     "@types/ws": "^8.5.3",
     "@types/yargs": "^17.0.2",
@@ -72,7 +76,7 @@
     "prettier": "^2.4.1",
     "ts-node": "^10.4.0",
     "typescript": "^4.4.3",
-    "webpack": "4.46.0",
-    "webpack-dev-server": "^3.4"
+    "webpack": "^5",
+    "webpack-dev-server": "^4"
   }
 }
