@@ -72,6 +72,7 @@
   .mini {
     all: initial;
     position: fixed;
+    bottom: 0;
     width: 400px;
     padding: 8px 5px 4px 5px;
     border: 1px solid #ddd;
@@ -197,16 +198,14 @@
   export default {
     oncreate() {
       // set left and bottom as px
-      const { left, top, height } = this.refs.mini.getBoundingClientRect()
+      const { left } = this.refs.mini.getBoundingClientRect()
       this.set({
         left: `${window.innerWidth / 2 - 200}px`,
-        top: `${window.innerHeight - height}px`,
       })
     },
     data() {
       return {
         moving: false,
-        top: '0',
         left: '0',
       }
     },
@@ -219,8 +218,7 @@
       },
       onMouseMove(e) {
         const { moving } = this.get()
-        const { left, top, width, height } =
-          this.refs.mini.getBoundingClientRect()
+        const { left, width } = this.refs.mini.getBoundingClientRect()
 
         if (moving) {
           // constrain element horizontally within window
@@ -228,14 +226,8 @@
             Math.max(left + e.movementX, 0),
             window.innerWidth - width
           )
-          // constrain element vertically within window
-          const newTop = Math.min(
-            Math.max(top + e.movementY, 0),
-            window.innerHeight - height
-          )
           this.set({
             left: `${newLeft}px`,
-            top: `${newTop}px`,
           })
         }
       },
