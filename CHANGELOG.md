@@ -1,3 +1,7 @@
+# 2023-05-15 0.3.22
+
+- Bump navigation timeout to 3 minutes
+
 # 2023-05-15 0.3.21
 
 - Fix Zen test timeout issues

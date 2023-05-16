@@ -522,7 +522,9 @@ export default class ChromeWrapper {
 
     const browser = await this.browser
     const page = await browser.newPage()
-    await page.setDefaultNavigationTimeout(0)
+
+    // set 3 mins timeout to reduce test flake on navigation timeout
+    await page.setDefaultNavigationTimeout(3 * 60 * 1000)
 
     const tab = new ChromeTab(browser, page, id, config, manifest, this.s3)
 
