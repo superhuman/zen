@@ -480,6 +480,9 @@ export default class ChromeWrapper {
 
     const browser = await this.browser
     const page = await browser.newPage()
+    // set 5 mins timeout to reduce test flake on navigation timeout
+    await page.setDefaultNavigationTimeout(5 * 60 * 1000)
+
     const tab = new ChromeTab(browser, page, id, config, manifest, this.s3)
 
     // TODO clean up order, right now it makes tab before goto to make the url stuff work properly
