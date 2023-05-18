@@ -1,12 +1,10 @@
 #!/usr/bin/env node
 
-// @ts-expect-error server is not typed
 import Server from './server'
-import initZen from './index'
-import yargs from 'yargs'
-import { invoke, workTests } from './util'
+import initZen, { Zen } from './index'
+import yargs, { fail } from 'yargs'
+import * as Util from './util.js'
 import * as Profiler from './profiler'
-import { Zen } from './types'
 
 type testFailure = {
   fullName: string
@@ -27,8 +25,7 @@ yargs(process.argv.slice(2))
   .command(
     ['local [configFile]', 'server [configFile]'],
     'Run zen with a local server',
-    // @ts-expect-error yargs changed their type def but this pattern still works
-    (yargs: yargs.Argv) => {
+    (yargs) => {
       yargs.positional('file', {
         type: 'string',
         describe: 'Path to the config file',
@@ -42,8 +39,7 @@ yargs(process.argv.slice(2))
   .command(
     'remote [configFile]',
     'Run zen in the console',
-    // @ts-expect-error yargs changed their type def but this pattern still works
-    (yargs: yargs.Argv) => {
+    (yargs) => {
       yargs.positional('file', {
         type: 'string',
         describe: 'Path to the config file',
@@ -68,42 +64,16 @@ async function runTests(
   tests: string[]
 ): Promise<TestResultsMap> {
   const groups = zen.journal.groupTests(tests, zen.config.lambdaConcurrency)
-  type failedTest = testFailure & { logStream: string }
 
-  const failedTests: failedTest[][] = await Promise.all(
-    groups.map(async (group: { tests: string[] }): Promise<failedTest[]> => {
+  const failedTests: testFailure[][] = await Promise.all(
+    groups.map(async (group: { tests: string[] }): Promise<testFailure[]> => {
       try {
-        const response = await workTests(zen, {
+        const response = await Util.invoke(zen.config.lambdaNames.workTests, {
           deflakeLimit: opts.maxAttempts,
           testNames: group.tests,
           sessionId: zen.config.sessionId,
         })
-        const logStreamName = response.logStreamName
-
-        // Map back to the old representation and fill in any tests that may have not run
-        const results = group.tests.map((test) => {
-          const results = response.results[test] || []
-          const result = results.at(-1)
-
-          if (!result) {
-            console.log(test, response.results, results)
-            return {
-              fullName: test,
-              attempts: 0,
-              error: 'Failed to run on remote!',
-              time: 0,
-              logStream: logStreamName,
-            }
-          } else {
-            return {
-              ...result,
-              logStream: logStreamName,
-              attempts: results.length,
-            }
-          }
-        })
-
-        return results.filter((r: testFailure) => r.error || r.attempts > 1)
+        return response.filter((r: testFailure) => r.error || r.attempts > 1)
       } catch (e) {
         console.error(e)
         return group.tests.map((name: string) => {
@@ -112,7 +82,6 @@ async function runTests(
             attempts: 0,
             error: 'zen failed to run this group',
             time: 0,
-            logStream: '',
           }
         })
       }
@@ -190,14 +159,9 @@ async function run(zen: Zen, opts: CLIOptions) {
 
     t0 = Date.now()
     console.log('Getting test names')
-    // @ts-expect-error(2322) invoke return is not typed right now
-    let workingSet: string[] = await invoke(
-      zen,
-      zen.config.lambdaNames.listTests,
-      {
-        sessionId: zen.config.sessionId,
-      }
-    )
+    let workingSet: string[] = await Util.invoke(zen.config.lambdaNames.listTests, {
+      sessionId: zen.config.sessionId,
+    })
 
     // In case there is an infinite loop, this should brick the test running
     let runsLeft = 5
@@ -247,7 +211,7 @@ async function run(zen: Zen, opts: CLIOptions) {
       }
     }
 
-    if (opts.logging) Profiler.logBatch(zen, metrics)
+    if (opts.logging) Profiler.logBatch(metrics)
     console.log(`Took ${Date.now() - t0}ms`)
     console.log(
       `${failCount ? '😢' : '🎉'} ${failCount} failed test${
