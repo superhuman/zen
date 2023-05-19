@@ -1,6 +1,6 @@
 module.hot?.accept((err) => {
   // TODO I think this might be the source of refresh looping
-  console.log('LOOPING')
+  console.log("LOOPING")
   if (err) location.reload()
 })
 
@@ -18,7 +18,6 @@ async function update(): Promise<ModuleId[]> {
       reject = rej
     })
 
-    // @ts-expect-error we are using an out of date version of webpack
     module.hot.check(true, (err, outdatedModules) => {
       if (!err) {
         location.reload()
