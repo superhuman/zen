@@ -1,3 +1,7 @@
+# 2023-06-12 0.3.23
+
+- Add timeout configuration option to Latte
+
 # 2023-05-19 0.3.22
 
 - revert base code back to last stable version 0.3.18

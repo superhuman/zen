@@ -13,9 +13,14 @@ export type FnOrGroup = TestFn | TestGroup
 export type OnDispose = (cb: () => void) => void
 type mode = 'debug' | 'headless'
 type helpers = {
-  resizeWindow: (dimensions: { width: number, height: number }) => void
+  resizeWindow: (dimensions: { width: number; height: number }) => void
 }
-type LatteOptions = { mode: mode; willHotReload: boolean; helpers?: helpers }
+type LatteOptions = {
+  mode: mode
+  willHotReload: boolean
+  helpers?: helpers
+  timeout?: number
+}
 type TestContext = Partial<Record<string, FnOrGroup>> & {
   currentTest: Test
   _suite: TestSuite
@@ -97,6 +102,7 @@ declare global {
   let helpers: helpers | undefined = undefined
   let currentContext: null | TestContext = null // The context of the currently running test.
   let currentTimeout: number
+  let timeout = 10000
 
   let whenCurrentTestFinished: Promise<void> | null = null // promise that's resolved when the currently running test finishes
   let currentTestResolve: null | (() => void) = null
@@ -135,6 +141,7 @@ declare global {
       mode = opts.mode
       willHotReload = opts.willHotReload
       helpers = opts.helpers
+      timeout = opts.timeout || timeout
     },
     waitForCurrentTest: async function waitForCurrentTest() {
       whenCurrentTestFinished && (await whenCurrentTestFinished)
@@ -429,7 +436,7 @@ declare global {
         }, ms)
       })
     }
-    setTimeoutPromise(10000)
+    setTimeoutPromise(timeout)
 
     context.zen = helpers || {}
     context.zen.extendRemoteTimeout = (ms: number) => {
@@ -441,7 +448,7 @@ declare global {
       const currentStack = new Error().stack
       throw new Error(`CbOrTest with undefined fn:
         fn Stack: ${cbOrTest.stack}
-        current Stack: ${currentStack} 
+        current Stack: ${currentStack}
         cbOrTest: ${JSON.stringify(cbOrTest)}
       `)
     }
