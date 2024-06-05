@@ -1,3 +1,11 @@
+# 2024-06-07 0.3.24
+
+- Modify webpack to work with wasm sqlite for local dev.
+- Adds security headers to server for wasm.
+- Adds `setDevelopmentHeaders` config option so we can modify the dev response headers with
+the correct csp.
+- Removes `HotModuleReplacementPlugin` we can't use this with webworkers for our currentl webpack setup since this module depends on `window` existing. The zen will still hard reload the page on file change.
+
 # 2023-06-12 0.3.23
 
 - Add timeout configuration option to Latte
