@@ -9,40 +9,43 @@ import WebpackAdapter from './webpack'
 import type { metric } from './profiler'
 
 require('sugar').extend()
+
+export type ZenConfig = {
+  log?: (metrics: metric[]) => Promise<void>
+  appRoot: string
+  setDevelopmentHeaders: (req: any, res: any) => void
+  port: number
+  testDependencies: string[]
+  lambdaConcurrency: number
+  htmlTemplate: string
+  sessionId: string
+  useSnapshot: boolean
+  tmpDir: string
+  alsoServe: { addToIndex: boolean; filePath: string }[]
+
+  // TODO flesh this out
+  aws: any
+
+  // TODO flesh this out
+  webpack: any
+  chrome?: {
+    width?: number
+    height?: number
+  },
+  lambdaNames: {
+    // The others are actually never used
+    workTests: string,
+    listTests: string
+  }
+}
+
 export type Zen = {
   s3Sync: S3Sync
   lambda: AWS.Lambda
   journal: Journal
   webpack: WebpackAdapter
   indexHtml: (pageType: string, forS3: boolean) => string
-
-  config: {
-    log?: (metrics: metric[]) => Promise<void>
-    appRoot: string
-    port: number
-    testDependencies: string[]
-    lambdaConcurrency: number
-    htmlTemplate: string
-    sessionId: string
-    useSnapshot: boolean
-    tmpDir: string
-    alsoServe: { addToIndex: boolean; filePath: string }[]
-
-    // TODO flesh this out
-    aws: any
-
-    // TODO flesh this out
-    webpack: any
-    chrome?: {
-      width?: number
-      height?: number
-    },
-    lambdaNames: {
-      // The others are actually never used
-      workTests: string,
-      listTests: string
-    }
-  }
+  config: ZenConfig
 }
 
 export default async function initZen(configFilePath: string): Promise<Zen> {
@@ -132,7 +135,7 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
 
   if (config.webpack) {
     // boot up webpack (if configured)
-    Zen.webpack = new WebpackAdapter(config.webpack)
+    Zen.webpack = new WebpackAdapter(config)
   }
 
   // TODO clean this up to remove the casting

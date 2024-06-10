@@ -1,9 +1,11 @@
 import path from 'path'
 import webpack, { Chunk } from 'webpack'
 import WebpackDevServer from 'webpack-dev-server'
-import type { Configuration, Compiler, Stats } from 'webpack'
-import type { Server } from 'connect'
 import EventEmitter from 'events'
+
+import type { Configuration as WebpackConfig, Compiler, Stats } from 'webpack'
+import type { Server } from 'connect'
+import type { ZenConfig } from '../index'
 
 type CompilingState = {
   status: 'compiling'
@@ -34,14 +36,18 @@ module.exports = class WebpackAdapter extends EventEmitter {
   compiler: Compiler
   compile?: state
   status?: state['status']
+  private zenConfig?: ZenConfig
 
-  constructor(config: Configuration) {
+  constructor(zenConfig: Configuration) {
     super()
-    this.addWebpackClient(config)
 
-    if (!config.plugins) config.plugins = []
-    config.plugins.push(new webpack.HotModuleReplacementPlugin())
-    config.plugins.push(
+    this.zenConfig = zenConfig
+    const webpackConfig: WebpackConfig = zenConfig.webpack
+    this.addWebpackClient(webpackConfig)
+
+    if (!webpackConfig.plugins) webpackConfig.plugins = []
+    webpackConfig.plugins.push(new webpack.ExtendedAPIPlugin())
+    webpackConfig.plugins.push(
       new webpack.ProgressPlugin((pct, message) => {
         if (pct > 0 && pct < 1)
           this.onStateChange({
@@ -52,8 +58,8 @@ module.exports = class WebpackAdapter extends EventEmitter {
       })
     )
 
-    config.plugins.push(new webpack.NamedModulesPlugin())
-    this.compiler = webpack(config)
+    webpackConfig.plugins.push(new webpack.NamedModulesPlugin())
+    this.compiler = webpack(webpackConfig)
 
     this.compiler.hooks.invalid.tap('Zen', () =>
       this.onStateChange({ status: 'compiling' })
@@ -91,6 +97,20 @@ module.exports = class WebpackAdapter extends EventEmitter {
   }
 
   startDevServer(server: Server) {
+    const zenConfig = this.zenConfig
+    if (zenConfig?.setDevelopmentHeaders) {
+      WebpackDevServer.prototype.setContentHeaders = function (req, res, next) {
+        if (this.headers) {
+          for (var name in this.headers) {
+            res.setHeader(name, this.headers[name])
+          }
+        }
+
+        zenConfig.setDevelopmentHeaders(req, res)
+        next()
+      }
+    }
+
     const devServer = new WebpackDevServer(this.compiler, {
       stats: { errorDetails: true },
       hot: true,
