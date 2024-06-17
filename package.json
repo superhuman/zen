@@ -1,9 +1,10 @@
 {
   "name": "@superhuman/zen",
-  "version": "0.3.24",
+  "version": "0.3.26",
   "description": "Karma replacement that runs your tests in seconds",
   "main": "lib/cli.js",
   "scripts": {
+    "release-new-version": "yarn build && npm publish",
     "example": "(cd example && node --inspect ../lib/index.js zen.js)",
     "test": "echo \"Ironic: no test specified\" && exit 1",
     "format": "prettier --write --ignore-unknown .",
@@ -66,7 +67,7 @@
     "prettier": "^2.4.1",
     "ts-node": "^10.4.0",
     "typescript": "^4.4.3",
-    "webpack": "4.46.0",
+    "webpack": "4.47.0",
     "webpack-dev-server": "^3.4"
   }
 }

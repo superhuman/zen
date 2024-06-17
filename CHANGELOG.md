@@ -1,3 +1,12 @@
+# 2024-06-17 0.3.26
+
+- Reset worker reloading logic to original logic from 0.3.23
+- Don't use COEP headers when running on remote since this breaks the fetching of the s3 files.
+
+# 2024-06-17 0.3.25
+
+- Test release. No changes.
+
 # 2024-06-07 0.3.24
 
 - Modify webpack to work with wasm sqlite for local dev.
