@@ -126,19 +126,23 @@ class ChromeTab {
   }
 
   async resizeWindow({ width, height }: { width: number; height: number }) {
+    console.log('ChromeWrapper.resizeWindow', { width, height })
     return this.page.setViewport({ width, height })
   }
 
   disconnect() {
+    console.log('ChromeWrapper.disconnect')
     return this.page.close()
   }
 
   changeState(state: ChromeTabState) {
+    console.log('ChromeWrapper.changeState', state)
     clearTimeout(this.timeout)
     this.state = state
   }
 
   setCodeHash(codeHash: string) {
+    console.log('ChromeWrapper.setCodeHash', codeHash)
     this.codeHash = codeHash
     if (this.state === 'idle' || this.state === 'badCode') {
       this.reload()
@@ -147,6 +151,7 @@ class ChromeTab {
 
   resolveWork?: (value: unknown) => void
   setTest(test: Test) {
+    console.log('ChromeWrapper.setTest', test)
     if (this.test) {
       this.resolveWork?.(null)
     }
@@ -170,7 +175,9 @@ class ChromeTab {
     resolve: (value: unknown) => void
     reject: (reason: unknown) => void
   }
+
   getTestNames() {
+    console.log('ChromeWrapper.getTestNames')
     const promise = new Promise((resolve, reject) => {
       this.listRequest = { resolve, reject }
     })
@@ -183,6 +190,7 @@ class ChromeTab {
 
   // Attempt to hot reload the latest code
   hotReload() {
+    console.log('ChromeWrapper.hotReload')
     if (this.config.skipHotReload) {
       return this.reload()
     }
@@ -195,6 +203,7 @@ class ChromeTab {
 
   startAt?: Date
   async run() {
+    console.log('ChromeWrapper.run')
     this.changeState('running')
     this.startAt = new Date()
     this.timeout = setTimeout(this.onTimeout, 20_000)
@@ -206,6 +215,7 @@ class ChromeTab {
   badCodeError?: string
   badCodeStack?: string
   badCode(msg: string, stack: string[]) {
+    console.log('ChromeWrapper.badCode', msg)
     this.changeState('badCode')
     this.badCodeError = msg
     this.badCodeStack = stack.join('\n')
@@ -219,6 +229,7 @@ class ChromeTab {
   }
 
   async listTests() {
+    console.log('ChromeWrapper.listTests')
     // TODO clean up this typing
     const { result, exceptionDetails } = (await this._evaluate(
       `Latte.flatten().map(t => t.fullName)`
@@ -237,6 +248,7 @@ class ChromeTab {
   }
 
   becomeIdle() {
+    console.log('ChromeWrapper.becomeIdle')
     this.changeState('idle')
     if (this.codeHash) this.hotReload()
     else if (this.test) this.run()
@@ -244,9 +256,11 @@ class ChromeTab {
   }
 
   async _retryOnClose<A>(cb: () => A): Promise<A | undefined> {
+    console.log('ChromeWrapper._retryOnClose')
     try {
       return await cb()
     } catch (e) {
+      console.log('ChromeWrapper._retryOnClose ERROR', e)
       if (e instanceof Error && e.message.includes('Session closed')) {
         const oldUrl = this.page.url()
         this.page = await this.browser.newPage()
@@ -257,6 +271,7 @@ class ChromeTab {
   }
 
   async reload() {
+    console.log('ChromeWrapper.reload')
     this.changeState('loading')
     this.timeout = setTimeout(this.onTimeout, 10 * 1000)
     this.codeHash = undefined
@@ -267,6 +282,8 @@ class ChromeTab {
   }
 
   onTimeout = () => {
+    console.log('Timeout trace')
+    console.trace()
     if (this.state == 'running') {
       this.failTest('Chrome-level test timeout')
     } else if (this.state == 'hotReload') {
@@ -274,13 +291,13 @@ class ChromeTab {
     } else if (this.state === 'loading') {
       console.log(`[${this.id}] timeout while loading`)
     }
-
     // If we hit a timeout, the page is likely stuck and we don't really know
     // if it's safe to run tests. The best we can do is reload.
     this.reload()
   }
 
   onMessageAdded(text: string) {
+    console.log('ChromeWrapper.onMessageAdded', text)
     const register = (name: string, cb: (value?: unknown) => void) => {
       if (text.startsWith(name)) {
         const value = text.slice(name.length).trim()
@@ -367,6 +384,7 @@ class ChromeTab {
   }
 
   onRequestPaused = async (request: Puppeteer.HTTPRequest) => {
+    console.log('ChromeWrapper.onRequestPaused')
     const gatewayUrl = process.env.GATEWAY_URL
     const requestUrl = request.url()
     const isToGateway = gatewayUrl && requestUrl.indexOf(gatewayUrl) >= 0

@@ -18,6 +18,7 @@ export type CLIOptions = {
   maxAttempts: number
   debug: boolean
   configFile: string
+  useExistingBuild: boolean
 }
 
 yargs(process.argv.slice(2))
@@ -47,92 +48,33 @@ yargs(process.argv.slice(2))
     },
     async (argv: CLIOptions) => {
       const zen = await initZen(argv.configFile)
-      run(zen, argv)
+      runRemoteTests(zen, argv)
     }
   )
   .options({
     logging: { type: 'boolean', default: false },
     maxAttempts: { type: 'number', default: 3 },
     debug: { type: 'boolean', default: false },
+    useExistingBuild: { type: 'boolean', default: false }
   }).argv
 
-type TestResultsMap = Record<string, testFailure>
-
-async function runTests(
-  zen: Zen,
-  opts: CLIOptions,
-  tests: string[]
-): Promise<TestResultsMap> {
-  const groups = zen.journal.groupTests(tests, zen.config.lambdaConcurrency)
-
-  const failedTests: testFailure[][] = await Promise.all(
-    groups.map(async (group: { tests: string[] }): Promise<testFailure[]> => {
-      try {
-        const response = await Util.invoke(zen.config.lambdaNames.workTests, {
-          deflakeLimit: opts.maxAttempts,
-          testNames: group.tests,
-          sessionId: zen.config.sessionId,
-        })
-        return response.filter((r: testFailure) => r.error || r.attempts > 1)
-      } catch (e) {
-        console.error(e)
-        return group.tests.map((name: string) => {
-          return {
-            fullName: name,
-            attempts: 0,
-            error: 'zen failed to run this group',
-            time: 0,
-          }
-        })
-      }
-    })
-  )
-
-  return failedTests
-    .flat()
-    .reduce((acc: Record<string, testFailure>, result: testFailure) => {
-      acc[result.fullName] = result
-      return acc
-    }, {})
-}
-
-function combineFailures(
-  currentFailures: TestResultsMap,
-  previousFailures?: TestResultsMap
-): TestResultsMap {
-  if (!previousFailures) return currentFailures
-
-  // Combine the current failures with the previous failures
-  const failures = { ...previousFailures }
-  // Reset the error state for all the previous tests, that way if they
-  // succeed it will report only as a flake
-  for (const testName in failures) {
-    failures[testName].error = undefined
-  }
-
-  for (const testName in currentFailures) {
-    const prevFailure = failures[testName]
-    const curFailure = currentFailures[testName]
-
-    if (!prevFailure) {
-      failures[testName] = curFailure
-    } else {
-      failures[testName] = {
-        ...prevFailure,
-        error: curFailure.error,
-        time: prevFailure.time + curFailure.time,
-        attempts: prevFailure.attempts + curFailure.attempts,
-      }
-    }
-  }
-
-  return failures
-}
-
-async function run(zen: Zen, opts: CLIOptions) {
+async function runRemoteTests(zen: Zen, opts: CLIOptions) {
   try {
     let t0 = Date.now()
-    if (zen.webpack) {
+    let shouldBuildWebpack = true
+    if (opts.useExistingBuild) {
+      const cachedCompileOutput = await zen.webpack.getCachedCompileOutput()
+      if (!cachedCompileOutput) {
+        console.log('Cached files missing. Running webpack build.')
+      } else {
+        console.log(`useExistingBuild=true -> Skipping build and using files from /build folder.`)
+        zen.webpack.compile = cachedCompileOutput
+        zen.webpack.status = cachedCompileOutput.status
+        shouldBuildWebpack = false
+      }
+    }
+
+    if (zen.webpack && shouldBuildWebpack) {
       console.log('Webpack building')
       let previousPercentage = 0
       zen.webpack.on(
@@ -223,4 +165,77 @@ async function run(zen: Zen, opts: CLIOptions) {
     console.error(e)
     process.exit(1)
   }
+}
+
+type TestResultsMap = Record<string, testFailure>
+
+async function runTests(
+  zen: Zen,
+  opts: CLIOptions,
+  tests: string[]
+): Promise<TestResultsMap> {
+  const groups = zen.journal.groupTests(tests, zen.config.lambdaConcurrency)
+
+  const failedTests: testFailure[][] = await Promise.all(
+    groups.map(async (group: { tests: string[] }): Promise<testFailure[]> => {
+      try {
+        const response = await Util.invoke(zen.config.lambdaNames.workTests, {
+          deflakeLimit: opts.maxAttempts,
+          testNames: group.tests,
+          sessionId: zen.config.sessionId,
+        })
+        return response.filter((r: testFailure) => r.error || r.attempts > 1)
+      } catch (e) {
+        console.error(e)
+        return group.tests.map((name: string) => {
+          return {
+            fullName: name,
+            attempts: 0,
+            error: 'zen failed to run this group',
+            time: 0,
+          }
+        })
+      }
+    })
+  )
+
+  return failedTests
+    .flat()
+    .reduce((acc: Record<string, testFailure>, result: testFailure) => {
+      acc[result.fullName] = result
+      return acc
+    }, {})
+}
+
+function combineFailures(
+  currentFailures: TestResultsMap,
+  previousFailures?: TestResultsMap
+): TestResultsMap {
+  if (!previousFailures) return currentFailures
+
+  // Combine the current failures with the previous failures
+  const failures = { ...previousFailures }
+  // Reset the error state for all the previous tests, that way if they
+  // succeed it will report only as a flake
+  for (const testName in failures) {
+    failures[testName].error = undefined
+  }
+
+  for (const testName in currentFailures) {
+    const prevFailure = failures[testName]
+    const curFailure = currentFailures[testName]
+
+    if (!prevFailure) {
+      failures[testName] = curFailure
+    } else {
+      failures[testName] = {
+        ...prevFailure,
+        error: curFailure.error,
+        time: prevFailure.time + curFailure.time,
+        attempts: prevFailure.attempts + curFailure.attempts,
+      }
+    }
+  }
+
+  return failures
 }

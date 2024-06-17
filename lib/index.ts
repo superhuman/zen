@@ -103,6 +103,8 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
       (Zen.webpack && Zen.webpack.compile && Zen.webpack.compile.entrypoints) ||
       []
 
+    console.log('entries:', entries)
+
     if (forS3) {
       deps.push(
         ...(config.alsoServe || []).map(

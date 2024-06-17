@@ -1,3 +1,4 @@
+import fs from 'fs'
 import path from 'path'
 import webpack, { Chunk } from 'webpack'
 import WebpackDevServer from 'webpack-dev-server'
@@ -83,15 +84,47 @@ module.exports = class WebpackAdapter extends EventEmitter {
 
   async build() {
     return await new Promise((resolve, reject) => {
-      this.compiler.run((error, stats) => {
+      this.compiler.run(async (error, stats) => {
         if (error) {
           return reject(error)
         } else if (stats?.hasErrors()) {
           const info = stats.toJson()
           return reject(new Error(info.errors.join('\n')))
         }
-
+        await this.cacheCompileOutput(this.compile)
         resolve(stats)
+      })
+    })
+  }
+
+  cacheCompileOutput (compileOutput) {
+    return new Promise((resolve, reject) => {
+      fs.writeFile('build/zen_webpack_compile_output.json', JSON.stringify({
+        files: compileOutput.files.map((f) => {
+          delete f['body']
+          return f
+        }),
+        entrypoints: compileOutput.entrypoints,
+        hash: compileOutput.hash,
+        status: compileOutput.status
+      }), (err) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve()
+        }
+      })
+    })
+  }
+
+  getCachedCompileOutput () {
+    return new Promise((resolve, reject) => {
+      fs.readFile('build/zen_webpack_compile_output.json', 'utf8', (err, data) => {
+        if (err) {
+          resolve(undefined)
+        } else if (data) {
+          resolve(JSON.parse(data))
+        }
       })
     })
   }

@@ -15,3 +15,7 @@ If you want to develop locally against the Superhuman desktop repo you can:
 - Run `yarn start` in this repo to build the zen library
 
 - When you are done run `yarn unlink @superhuman/zen` in the desktop repo.
+
+## Local Dev Tips
+
+-
