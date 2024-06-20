@@ -1,3 +1,11 @@
+# 2024-06-17 0.3.28
+
+- Minor logging changes
+
+# 2024-06-17 0.3.27
+
+- Minor logging changes
+
 # 2024-06-17 0.3.26
 
 - Reset worker reloading logic to original logic from 0.3.23
