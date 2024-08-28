@@ -163,9 +163,11 @@ declare global {
       // Store logs so they can be relayed back from remote
       const log: string[] = []
       const originalConsoleLog = console.log
-      console.log = (...args) => {
-        log.push(args.join(' '))
-        originalConsoleLog.apply(console, args)
+      if (mode === 'headless') {
+        console.log = (...args) => {
+          log.push(args.join(' '))
+          originalConsoleLog.apply(console, args)
+        }
       }
 
       try {
@@ -208,9 +210,15 @@ declare global {
               error = e || 'undefined error'
             }
 
-            // AfterEach generally does cleanup. If it fails, it's unsafe to run more tests.
-            // By not catching exceptions here, we abort running and allow our chrome wrapper to reload.
-            await applyCallbacks('afterEach', currentContext)
+            // AfterEach generally does cleanup. If cleanup fails, it's probably unsafe to run more tests.
+            // By re-throwing the exception here, we abort running and allow our chrome wrapper to reload.
+            try {
+              await applyCallbacks('afterEach', currentContext)
+            } catch (e) {
+              error = error || e || 'undefined error'
+              Latte.onTest?.(test, error, log)
+              throw e
+            }
             Latte.onTest?.(test, error, log)
           }
 

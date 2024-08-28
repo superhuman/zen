@@ -123,6 +123,10 @@ class ChromeTab {
     this.page.on('error', (error) => {
       this.onExceptionThrown(error)
     })
+    this.page.on('pageerror', (error: Error) => {
+      console.log(error)
+      this.onMessageAdded(error.message + ':' + error.stack)
+    })
   }
 
   async resizeWindow({ width, height }: { width: number; height: number }) {
