@@ -1,3 +1,11 @@
+# 2024-08-28 0.3.29
+
+- Correctly capture and log page errors
+- Remove unhelpful console log
+- Fix console log stack traces in `debug` (local) mode
+- Capture and log errors in afterEach blocks on `headless` (remote) mode
+- Run linter / formatter
+
 # 2024-06-17 0.3.28
 
 - Minor logging changes
@@ -20,7 +28,7 @@
 - Modify webpack to work with wasm sqlite for local dev.
 - Adds security headers to server for wasm.
 - Adds `setDevelopmentHeaders` config option so we can modify the dev response headers with
-the correct csp.
+  the correct csp.
 - Removes `HotModuleReplacementPlugin` we can't use this with webworkers for our currentl webpack setup since this module depends on `window` existing. The zen will still hard reload the page on file change.
 
 # 2023-06-12 0.3.23

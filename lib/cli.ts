@@ -159,9 +159,12 @@ async function run(zen: Zen, opts: CLIOptions) {
 
     t0 = Date.now()
     console.log('Getting test names')
-    let workingSet: string[] = await Util.invoke(zen.config.lambdaNames.listTests, {
-      sessionId: zen.config.sessionId,
-    })
+    let workingSet: string[] = await Util.invoke(
+      zen.config.lambdaNames.listTests,
+      {
+        sessionId: zen.config.sessionId,
+      }
+    )
 
     // In case there is an infinite loop, this should brick the test running
     let runsLeft = 5
