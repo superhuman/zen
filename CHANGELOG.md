@@ -1,6 +1,10 @@
+# 2024-11-06 0.3.31
+
+- Update aws-sdk and serve-static deps and update dev server to new format.
+
 # 2024-08-28 0.3.30
 
-- wrap websocket json parsing in a try/catch
+- Wrap websocket json parsing in a try/catch
 
 # 2024-08-28 0.3.29
 
