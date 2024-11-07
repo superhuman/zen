@@ -1,6 +1,6 @@
 {
   "name": "@superhuman/zen",
-  "version": "0.3.30",
+  "version": "0.3.31",
   "description": "Karma replacement that runs your tests in seconds",
   "main": "lib/cli.js",
   "scripts": {
@@ -33,7 +33,7 @@
   ],
   "homepage": "https://github.com/superhuman/zen#readme",
   "dependencies": {
-    "aws-sdk": "^2.238.1",
+    "aws-sdk": "2.1691.0",
     "btoa": "^1.2.1",
     "connect": "^3.6.1",
     "fuzzysort": "^1.1.4",
@@ -42,7 +42,7 @@
     "node-fetch": "^2.3.0",
     "puppeteer": "^16.0.0",
     "puppeteer-core": "^15.5.0",
-    "serve-static": "^1.12.2",
+    "serve-static": "1.16.2",
     "sugar": "^2.0.4",
     "svelte": "2.16.1",
     "uuid": "^3.3.2",
