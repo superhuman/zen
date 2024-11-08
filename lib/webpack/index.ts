@@ -96,7 +96,7 @@ module.exports = class WebpackAdapter extends EventEmitter {
     })
   }
 
-  startDevServer(server: Server) {
+  async startDevServer(server: Server) {
     const zenConfig = this.zenConfig
     if (zenConfig?.setDevelopmentHeaders) {
       WebpackDevServer.prototype.setContentHeaders = function (req, res, next) {
@@ -113,12 +113,12 @@ module.exports = class WebpackAdapter extends EventEmitter {
 
     const devServer = new WebpackDevServer({
       devMiddleware: {
-        stats: { errorDetails: true },
+        stats: { errorDetails: true }
       },
       hot: true
     }, this.compiler)
-
-    // @ts-expect-error app does exist in this version of dev server
+    await devServer.start()
+    console.log('devServer.app', !!devServer.app)
     server.use('/webpack', devServer.app)
   }
 
@@ -127,18 +127,21 @@ module.exports = class WebpackAdapter extends EventEmitter {
       return e.module ? `${e.module.id}: ${e.message}` : e.message
     })
 
+    const files = Object.keys(stats.compilation.assets).map((name) => {
+      const source = stats.compilation.assets[name].source()
+      return { path: `webpack/${name}`, body: source }
+    })
+    const entrypoints = stats.compilation.entrypoints
+      .get('bundle')
+      ?.chunks.map((chunk: Chunk) => chunk.files.values().next().value) ||
+      []
+
+    console.log('files', files)
+    console.log('entrypoints', entrypoints)
+
     const state = Object.assign(stats, {
-      files: Object.keys(stats.compilation.assets).map((name) => {
-        const source = stats.compilation.assets[name].source()
-        return { path: `webpack/${name}`, body: source }
-      }),
-
-      entrypoints:
-        stats.compilation.entrypoints
-          .get('bundle')
-          ?.chunks.map((chunk: Chunk) => chunk.files.values().next().value) ||
-        [],
-
+      files,
+      entrypoints,
       errors,
       status: errors.length ? ('error' as const) : ('done' as const),
     })
