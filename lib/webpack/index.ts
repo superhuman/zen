@@ -98,22 +98,12 @@ module.exports = class WebpackAdapter extends EventEmitter {
 
   async startDevServer(server: Server) {
     const zenConfig = this.zenConfig
-    if (zenConfig?.setDevelopmentHeaders) {
-      WebpackDevServer.prototype.setContentHeaders = function (req, res, next) {
-        if (this.headers) {
-          for (var name in this.headers) {
-            res.setHeader(name, this.headers[name])
-          }
-        }
-
-        zenConfig.setDevelopmentHeaders(req, res)
-        next()
-      }
-    }
-
     const devServer = new WebpackDevServer({
-      client: {
-        logging: 'none',
+      hot: false,
+      client: false,
+      headers: (req, res) => {
+        const headers = zenConfig.getDevelopmentHeaders(req.originalUrl)
+        return headers
       },
       devMiddleware: {
         stats: {
@@ -129,7 +119,6 @@ module.exports = class WebpackAdapter extends EventEmitter {
 
         return middlewares;
       },
-      hot: true,
       static: {
         directory: path.resolve(__dirname, '../build')
       },

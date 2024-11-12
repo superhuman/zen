@@ -5,6 +5,7 @@ module.hot?.accept((err) => {
 })
 
 function needsUpdate(hash: string): boolean {
+  console.log(__webpack_hash__)
   return !!hash && hash.indexOf(__webpack_hash__) == -1
 }
 
