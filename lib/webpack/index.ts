@@ -112,10 +112,28 @@ module.exports = class WebpackAdapter extends EventEmitter {
     }
 
     const devServer = new WebpackDevServer({
-      devMiddleware: {
-        stats: { errorDetails: true }
+      client: {
+        logging: 'none',
       },
-      hot: true
+      devMiddleware: {
+        stats: {
+          preset: 'minimal', // Only output when errors or new compilation
+          moduleTrace: false,
+          errorDetails: false
+        },
+        publicPath: '/'
+      },
+      // Silence server startup logs
+      setupMiddlewares: (middlewares, devServer) => {
+        devServer.logger.info = () => {};
+
+        return middlewares;
+      },
+      hot: true,
+      static: {
+        directory: path.resolve(__dirname, '../build')
+      },
+      port: 9000
     }, this.compiler)
     await devServer.start()
     console.log('devServer.app', !!devServer.app)
