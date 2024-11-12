@@ -136,7 +136,6 @@ module.exports = class WebpackAdapter extends EventEmitter {
       port: 9000
     }, this.compiler)
     await devServer.start()
-    console.log('devServer.app', !!devServer.app)
     server.use('/webpack', devServer.app)
   }
 
@@ -153,9 +152,6 @@ module.exports = class WebpackAdapter extends EventEmitter {
       .get('bundle')
       ?.chunks.map((chunk: Chunk) => chunk.files.values().next().value) ||
       []
-
-    console.log('files', files)
-    console.log('entrypoints', entrypoints)
 
     const state = Object.assign(stats, {
       files,
