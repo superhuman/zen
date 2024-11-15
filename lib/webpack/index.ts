@@ -111,12 +111,11 @@ module.exports = class WebpackAdapter extends EventEmitter {
       }
     }
 
-    const devServer = new WebpackDevServer({
-      devMiddleware: {
-        stats: { errorDetails: true },
-      },
-      hot: true
-    }, this.compiler)
+    const devServer = new WebpackDevServer(this.compiler, {
+      stats: { errorDetails: true },
+      hot: true,
+      inline: false,
+    })
 
     // @ts-expect-error app does exist in this version of dev server
     server.use('/webpack', devServer.app)

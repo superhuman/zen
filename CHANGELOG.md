@@ -1,5 +1,9 @@
 # 2024-11-06 0.3.31
 
+- reset dev server calling args to old format
+
+# 2024-11-06 0.3.31
+
 - Update aws-sdk and serve-static deps and update dev server to new format.
 
 # 2024-08-28 0.3.30
