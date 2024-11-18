@@ -96,28 +96,34 @@ module.exports = class WebpackAdapter extends EventEmitter {
     })
   }
 
-  startDevServer(server: Server) {
+  async startDevServer(server: Server) {
     const zenConfig = this.zenConfig
-    if (zenConfig?.setDevelopmentHeaders) {
-      WebpackDevServer.prototype.setContentHeaders = function (req, res, next) {
-        if (this.headers) {
-          for (var name in this.headers) {
-            res.setHeader(name, this.headers[name])
-          }
+    const devServer = new WebpackDevServer({
+      hot: false,
+      client: false,
+      headers: (req, res) => {
+        const headers = zenConfig.getDevelopmentHeaders(req.originalUrl)
+        return headers
+      },
+      devMiddleware: {
+        publicPath: '/',
+        stats: {
+          preset: 'minimal', // Only output when errors or new compilation
+          moduleTrace: false,
+          errorDetails: false
         }
-
-        zenConfig.setDevelopmentHeaders(req, res)
-        next()
-      }
-    }
-
-    const devServer = new WebpackDevServer(this.compiler, {
-      stats: { errorDetails: true },
-      hot: true,
-      inline: false,
-    })
-
-    // @ts-expect-error app does exist in this version of dev server
+      },
+      // Silence server startup logs.
+      setupMiddlewares: (middlewares, devServer) => {
+        devServer.logger.info = () => {};
+        return middlewares;
+      },
+      static: {
+        directory: zenConfig.devServerOptions.directory,
+      },
+      port: 9000
+    }, this.compiler)
+    await devServer.start()
     server.use('/webpack', devServer.app)
   }
 
@@ -126,18 +132,18 @@ module.exports = class WebpackAdapter extends EventEmitter {
       return e.module ? `${e.module.id}: ${e.message}` : e.message
     })
 
+    const files = Object.keys(stats.compilation.assets).map((name) => {
+      const source = stats.compilation.assets[name].source()
+      return { path: `webpack/${name}`, body: source }
+    })
+    const entrypoints = stats.compilation.entrypoints
+      .get('bundle')
+      ?.chunks.map((chunk: Chunk) => chunk.files.values().next().value) ||
+      []
+
     const state = Object.assign(stats, {
-      files: Object.keys(stats.compilation.assets).map((name) => {
-        const source = stats.compilation.assets[name].source()
-        return { path: `webpack/${name}`, body: source }
-      }),
-
-      entrypoints:
-        stats.compilation.entrypoints
-          .get('bundle')
-          ?.chunks.map((chunk: Chunk) => chunk.files.values().next().value) ||
-        [],
-
+      files,
+      entrypoints,
       errors,
       status: errors.length ? ('error' as const) : ('done' as const),
     })
