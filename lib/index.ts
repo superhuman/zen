@@ -1,12 +1,16 @@
 import * as path from 'path'
-import * as https from 'https'
-import * as Util from './util'
-import * as AWS from 'aws-sdk'
+import Util from './util'
+import { LambdaClient } from '@aws-sdk/client-lambda'
+import { NodeHttpHandler } from '@aws-sdk/node-http-handler'
+import { Agent } from 'https'
 import S3Sync from './s3-sync'
 import Journal from './journal'
 import uuidv4 from 'uuid/v4'
 import WebpackAdapter from './webpack'
 import Profiler from './profiler'
+import { InvokeCommand } from '@aws-sdk/client-lambda'
+
+import type { Logger } from './profiler'
 
 require('sugar').extend()
 
@@ -36,61 +40,52 @@ export type ZenConfig = {
     workTests: string
     listTests: string
   }
+  runId: string
+  log: Logger
 }
 
 export type Zen = {
   s3Sync: S3Sync
-  lambda: AWS.Lambda
   journal: Journal
   webpack: WebpackAdapter
   indexHtml: (pageType: string, forS3: boolean) => string
   config: ZenConfig
   profiler: Profiler
+  lambdaInvoke: (name: string, args: Record<string, unknown>) => any
 }
 
 export default async function initZen(configFilePath: string): Promise<Zen> {
-  // TODO fix the arg part, the order for shifting was broken because of import order
-  //
   let configFile = require(path.join(process.cwd(), configFilePath))
+  const appRoot = path.resolve(process.cwd(), configFile.appRoot || '')
   if (typeof configFile === 'function') {
     configFile = await configFile()
   }
 
-  const Zen: Partial<Zen> = ((global as any).Zen = {
-    config: configFile,
-  })
+  const config: ZenConfig = {
+    ...configFile,
+    appRoot,
+    port: configFile.port || 3100,
+    testDependencies: configFile.testDependencies || [],
+    lambdaConcurrency: configFile.lambdaConcurrency || 400,
+    htmlTemplate: configFile.htmlTemplate || '<body>ZEN_SCRIPTS</body>',
+    sessionId: configFile.sessionId || uuidv4(),
+    runId: uuidv4(),
+    useSnapshot:
+      configFile.useSnapshot === undefined ? true : !!configFile.useSnapshot,
+    lambdaNames: configFile.lambdaNames || {
+      workTests: 'zen-workTests',
+      listTests: 'zen-listTests',
+    },
+    headedChromePort: 3333,
 
-  // load the config with some defaults
-  const config = Zen.config
-  config.appRoot = path.resolve(process.cwd(), config.appRoot || '')
-  config.port = config.port || 3100
-  config.testDependencies = config.testDependencies || []
-  config.lambdaConcurrency = config.lambdaConcurrency || 400
-  config.htmlTemplate = config.htmlTemplate || '<body>ZEN_SCRIPTS</body>'
-  config.sessionId = config.sessionId || uuidv4()
-  config.runId = uuidv4()
-  config.useSnapshot === undefined ? true : !!config.useSnapshot
-  config.lambdaNames = config.lambdaNames || {
-    workTests: 'zen-workTests',
-    listTests: 'zen-listTests',
+    // tmpDir is where we cache files between runs
+    tmpDir: configFile.tmpDir || path.join(appRoot, '.zen'),
   }
 
-  // tmpDir is where we cache files between runs
-  config.tmpDir = config.tmpDir || path.join(config.appRoot, '.zen')
-  Util.ensureDir(config.tmpDir)
-  console.log('Using tmpDir', config.tmpDir)
+  const webpack = config.webpack ? new WebpackAdapter(config) : undefined
 
-  AWS.config.update(config.aws)
-  Zen.s3Sync = new S3Sync() // Keeps our local files in sync with S3
-  Zen.lambda = new AWS.Lambda()
-  Zen.journal = new Journal()
-  Zen.profiler = new Profiler({ runId: config.runId, logger: config.log })
-
-  // Without this, node limits our requests and slows down running on lambda
-  https.globalAgent.maxSockets = 2000 // TODO multiplex over fewer connections
-
-  Zen.indexHtml = function indexHtml(pageType, forS3) {
-    let deps = ['build/latte.js']
+  function generateIndexHtml(pageType: string, forS3: boolean) {
+    const deps = ['build/latte.js']
     if (pageType == 'head') {
       deps.unshift('icons')
       deps.push(
@@ -101,9 +96,8 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
       )
     }
     deps.push(`build/${pageType}.js`) // after Zen dependencies, but before user code
-    let entries =
-      (Zen.webpack && Zen.webpack.compile && Zen.webpack.compile.entrypoints) ||
-      []
+    // @ts-expect-error
+    const entries = webpack?.compile?.entrypoints || []
 
     if (forS3) {
       deps.push(
@@ -114,8 +108,8 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
       deps.push(entries.map((e: string) => `webpack/${e}`))
     } else {
       deps.push(
-        ...Zen.config.testDependencies.map((t) =>
-          t.replace(Zen.config.appRoot, '/base')
+        ...config.testDependencies.map((t) =>
+          t.replace(config.appRoot, '/base')
         )
       )
       deps.push(entries.map((e: string) => `//localhost:3100/webpack/${e}`))
@@ -127,19 +121,64 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
       .map((d) => `<script src='${d}'></script>`)
 
     // NB it's important that we don't include the config when the index is uploaded to S3
-    let cfg = pageType == 'head' ? Zen.config : {}
+    let cfg = pageType == 'head' ? config : {}
     scripts.unshift(`<script>
-      window.Zen = {config: ${JSON.stringify(cfg)}}
-    </script>`)
+window.Zen = {config: ${JSON.stringify(cfg)}}
+</script>`)
 
-    return Zen.config.htmlTemplate.replace('ZEN_SCRIPTS', scripts.join('\n'))
+    return config.htmlTemplate.replace('ZEN_SCRIPTS', scripts.join('\n'))
   }
 
-  if (config.webpack) {
-    // boot up webpack (if configured)
-    Zen.webpack = new WebpackAdapter(config)
+  const lambdaClient = new LambdaClient({
+    region: config.aws.region,
+    requestHandler: new NodeHttpHandler({
+      httpsAgent: new Agent({
+        maxSockets: 2000,
+        keepAlive: true,
+      }),
+    }),
+  })
+
+  async function lambdaInvoke(name: string, args: Record<string, unknown>) {
+    const command = new InvokeCommand({
+      FunctionName: name,
+      Payload: JSON.stringify(args),
+    })
+
+    const result = await lambdaClient.send(command)
+
+    if (result.StatusCode != 200) {
+      throw new Error(`Invoke Error ${name}${args}: ${result}`)
+    }
+
+    const payload = JSON.parse(new TextDecoder().decode(result.Payload))
+
+    if (payload.errorMessage) {
+      const err = new Error(payload.errorMessage)
+      err.stack = payload.trace ? payload.trace.join('\n') : err.stack
+      err.stack += `\nRequest Id: ${result['$metadata'].requestId}`
+      throw err
+    }
+
+    return payload
   }
 
-  // TODO clean this up to remove the casting
-  return Zen
+  const zen: Partial<Zen> = {
+    config,
+    lambdaInvoke,
+    indexHtml: generateIndexHtml,
+    webpack,
+    profiler: new Profiler({ runId: config.runId, logger: config.log }),
+  }
+
+  // TODO: remove zen global
+  globalThis.Zen = zen
+
+  zen.s3Sync = new S3Sync(zen)
+  zen.journal = new Journal()
+
+  Util.ensureDir(zen.config.tmpDir)
+  console.log('Using tmpDir', zen.config.tmpDir)
+
+  return zen as Zen
 }
