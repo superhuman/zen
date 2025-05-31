@@ -6,17 +6,19 @@ import yargs, { fail } from 'yargs'
 import * as Util from './util.js'
 import * as Profiler from './profiler'
 
-type testFailure = {
+type TestFailure = {
   fullName: string
   attempts: number
-  error?: string
+  error: string
   time: number
+  stack?: string
 }
 
 export type CLIOptions = {
   logging: boolean
   maxAttempts: number
   debug: boolean
+  reuseBuild: boolean
   configFile: string
 }
 
@@ -54,9 +56,10 @@ yargs(process.argv.slice(2))
     logging: { type: 'boolean', default: false },
     maxAttempts: { type: 'number', default: 3 },
     debug: { type: 'boolean', default: false },
+    reuseBuild: { type: 'boolean', default: false },
   }).argv
 
-type TestResultsMap = Record<string, testFailure>
+type TestResultsMap = Record<string, TestFailure>
 
 async function runTests(
   zen: Zen,
@@ -65,15 +68,17 @@ async function runTests(
 ): Promise<TestResultsMap> {
   const groups = zen.journal.groupTests(tests, zen.config.lambdaConcurrency)
 
-  const failedTests: testFailure[][] = await Promise.all(
-    groups.map(async (group: { tests: string[] }): Promise<testFailure[]> => {
+  const failedTests: TestFailure[][] = await Promise.all(
+    groups.map(async (group: { tests: string[] }): Promise<TestFailure[]> => {
       try {
         const response = await Util.invoke(zen.config.lambdaNames.workTests, {
           deflakeLimit: opts.maxAttempts,
           testNames: group.tests,
           sessionId: zen.config.sessionId,
         })
-        return response.filter((r: testFailure) => r.error || r.attempts > 1)
+
+        // errors or more than one attempt
+        return response.filter((r: TestFailure) => r.error || r.attempts > 1)
       } catch (e) {
         console.error(e)
         return group.tests.map((name: string) => {
@@ -90,49 +95,16 @@ async function runTests(
 
   return failedTests
     .flat()
-    .reduce((acc: Record<string, testFailure>, result: testFailure) => {
+    .reduce((acc: Record<string, TestFailure>, result: TestFailure) => {
       acc[result.fullName] = result
       return acc
     }, {})
 }
 
-function combineFailures(
-  currentFailures: TestResultsMap,
-  previousFailures?: TestResultsMap
-): TestResultsMap {
-  if (!previousFailures) return currentFailures
-
-  // Combine the current failures with the previous failures
-  const failures = { ...previousFailures }
-  // Reset the error state for all the previous tests, that way if they
-  // succeed it will report only as a flake
-  for (const testName in failures) {
-    failures[testName].error = undefined
-  }
-
-  for (const testName in currentFailures) {
-    const prevFailure = failures[testName]
-    const curFailure = currentFailures[testName]
-
-    if (!prevFailure) {
-      failures[testName] = curFailure
-    } else {
-      failures[testName] = {
-        ...prevFailure,
-        error: curFailure.error,
-        time: prevFailure.time + curFailure.time,
-        attempts: prevFailure.attempts + curFailure.attempts,
-      }
-    }
-  }
-
-  return failures
-}
-
 async function run(zen: Zen, opts: CLIOptions) {
   try {
     let t0 = Date.now()
-    if (zen.webpack) {
+    if (zen.webpack && !opts.reuseBuild) {
       console.log('Webpack building')
       let previousPercentage = 0
       zen.webpack.on(
@@ -146,16 +118,17 @@ async function run(zen: Zen, opts: CLIOptions) {
       )
       await zen.webpack.build()
       console.log(`Took ${Date.now() - t0}ms`)
+      t0 = Date.now()
+      console.log('Syncing to S3')
+      zen.s3Sync.on(
+        'status',
+        (msg: string) => (opts.debug || process.env.DEBUG) && console.log(msg)
+      )
+      await zen.s3Sync.run(zen.indexHtml('worker', true))
+      console.log(`Took ${Date.now() - t0}ms`)
+    } else {
+      console.log('Reusing existing build.')
     }
-
-    t0 = Date.now()
-    console.log('Syncing to S3')
-    zen.s3Sync.on(
-      'status',
-      (msg: string) => (opts.debug || process.env.DEBUG) && console.log(msg)
-    )
-    await zen.s3Sync.run(zen.indexHtml('worker', true))
-    console.log(`Took ${Date.now() - t0}ms`)
 
     t0 = Date.now()
     console.log('Getting test names')
@@ -166,64 +139,68 @@ async function run(zen: Zen, opts: CLIOptions) {
       }
     )
 
-    // In case there is an infinite loop, this should brick the test running
-    let runsLeft = 5
-    let failures: TestResultsMap | undefined
+    // In case there is an issue with the lamda retry mechanism we
+    // cap the number of times we will try to prevent going into an
+    // infinite loop. The actual retrying is happening on the lamdaWorker.
+    const MAX_ATTEMPTS = opts.maxAttempts
+    const runFailures: TestResultsMap = {}
+    const runFlakes: TestResultsMap = {}
+    let attempt = 0
     console.log(`Running ${workingSet.length} tests`)
-    while (runsLeft > 0 && workingSet.length > 0) {
-      runsLeft--
+    while (attempt < MAX_ATTEMPTS && workingSet.length > 0) {
+      const currentRunFailures = await runTests(zen, opts, workingSet)
 
-      const currentFailures = await runTests(zen, opts, workingSet)
-      failures = combineFailures(currentFailures, failures)
-
-      const testsToContinue = []
-      for (const testName in failures) {
-        const failure = failures[testName]
-        if (!failure) continue
-        if (failure.error && failure.attempts < opts.maxAttempts) {
-          testsToContinue.push(failure.fullName)
+      workingSet = []
+      for (const failure of Object.values(currentRunFailures)) {
+        if (failure.attempts < opts.maxAttempts) {
+          runFlakes[failure.fullName] = failure
+          workingSet.push(failure.fullName)
+        } else {
+          delete runFlakes[failure.fullName]
+          runFailures[failure.fullName] = failure
         }
       }
-      workingSet = testsToContinue
+
       if (workingSet.length > 0)
         console.log(`Trying to rerun ${workingSet.length} tests`)
+
+      attempt++
     }
 
     const metrics = []
-    let failCount = 0
-    for (const test of Object.values(failures || {})) {
-      metrics.push({
-        name: 'log.test_failed',
-        fields: {
-          value: test.attempts,
-          testName: test.fullName,
-          time: test.time,
-          error: test.error,
-        },
-      })
+    for (const test of Object.values(runFlakes)) {
+      metrics.push(createTestFailLog(test))
+      console.log(`⚠️ ${test.fullName} (flaked ${test.attempts - 1}x)\n ${test.stack || test.error}\nLogs: ${test.logStream}`)
+    }
 
-      if (test.error) {
-        failCount += 1
-        console.log(
-          `🔴 ${test.fullName} ${test.error} (tried ${
-            test.attempts || 1
-          } times)`
-        )
-      } else if (test.attempts > 1) {
-        console.log(`⚠️ ${test.fullName} (flaked ${test.attempts - 1}x)`)
-      }
+    for (const test of Object.values(runFailures)) {
+      metrics.push(createTestFailLog(test))
+      console.log(`🔴 ${test.fullName} (tried ${test.attempts || 1} times)\n ${test.stack || test.error}\nLogs: ${test.logStream}`)
     }
 
     if (opts.logging) Profiler.logBatch(metrics)
+    const failCount = Object.values(runFailures).length
+    const flakeCount = Object.values(runFlakes).length
     console.log(`Took ${Date.now() - t0}ms`)
-    console.log(
-      `${failCount ? '😢' : '🎉'} ${failCount} failed test${
-        failCount === 1 ? '' : 's'
-      }`
-    )
+    if (flakeCount > 0) {
+      console.log(`⚠️ ${flakeCount} flaked test${flakeCount === 1 ? '' : 's'}.`)
+    }
+    console.log(`${failCount ? '😢' : '🎉'} ${failCount} failed test${failCount === 1 ? '' : 's'}`)
     process.exit(failCount ? 1 : 0)
   } catch (e) {
     console.error(e)
     process.exit(1)
+  }
+}
+
+function createTestFailLog(test: TestFailure) {
+  return {
+    name: 'log.test_failed',
+    fields: {
+      value: test.attempts,
+      testName: test.fullName,
+      time: test.time,
+      error: test.error,
+    }
   }
 }
