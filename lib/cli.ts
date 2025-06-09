@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execSync } from 'child_process'
 import Server from './server'
 import initZen, { Zen } from './index'
 import yargs, { fail } from 'yargs'
@@ -57,6 +58,8 @@ yargs(process.argv.slice(2))
     maxAttempts: { type: 'number', default: 3 },
     debug: { type: 'boolean', default: false },
     reuseBuild: { type: 'boolean', default: false },
+    showRemoteLogs: { type: 'boolean', default: false },
+    filter: { type: 'string' },
   }).argv
 
 type TestResultsMap = Record<string, TestFailure>
@@ -139,6 +142,13 @@ async function run(zen: Zen, opts: CLIOptions) {
       }
     )
 
+    if (opts.filter) {
+      console.log('Filtering tests by "', opts.filter, '"')
+      workingSet = workingSet.filter((testName) => {
+        return testName.includes(opts.filter)
+      })
+    }
+
     // In case there is an issue with the lamda retry mechanism we
     // cap the number of times we will try to prevent going into an
     // infinite loop. The actual retrying is happening on the lamdaWorker.
@@ -170,15 +180,28 @@ async function run(zen: Zen, opts: CLIOptions) {
     const metrics = []
     for (const test of Object.values(runFlakes)) {
       metrics.push(createTestFailLog(test))
-      console.log(`⚠️ ${test.fullName} (flaked ${test.attempts - 1}x)\n ${test.stack || test.error}\nLogs: ${test.logStream}`)
+
+      const remoteLoggingCommand = `aws logs get-log-events --log-group-name "/aws/lambda/${zen.config.lambdaNames.workTests}" --log-stream-name '${test.logStream}'`
+      if (opts.showRemoteLogs) {
+        execSync(remoteLoggingCommand, { stdio: 'inherit', encoding: 'utf8' })
+      }
+
+      console.log(`⚠️ ${test.fullName} (flaked ${test.attempts - 1}x)\n ${test.stack || test.error}\nTo View Logs Run: ${remoteLoggingCommand}`)
     }
 
     for (const test of Object.values(runFailures)) {
       metrics.push(createTestFailLog(test))
-      console.log(`🔴 ${test.fullName} (tried ${test.attempts || 1} times)\n ${test.stack || test.error}\nLogs: ${test.logStream}`)
+
+      const remoteLoggingCommand = `aws logs get-log-events --query 'events[*].message' --log-group-name "/aws/lambda/${zen.config.lambdaNames.workTests}" --log-stream-name '${test.logStream}'`
+      if (opts.showRemoteLogs) {
+        execSync(remoteLoggingCommand, { stdio: 'inherit', encoding: 'utf8' })
+      }
+
+      console.log(`🔴 ${test.fullName} (tried ${test.attempts || 1} times)\n ${test.stack || test.error}\nTo View Logs Run: ${remoteLoggingCommand}`)
     }
 
     if (opts.logging) Profiler.logBatch(metrics)
+
     const failCount = Object.values(runFailures).length
     const flakeCount = Object.values(runFlakes).length
     console.log(`Took ${Date.now() - t0}ms`)

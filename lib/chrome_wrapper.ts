@@ -94,6 +94,8 @@ type FileManifest = {
   assetUrl: string
 }
 
+const TEST_TIMEOUT = 45000
+
 class ChromeTab {
   codeHash?: string
   test?: Test
@@ -117,7 +119,7 @@ class ChromeTab {
     this.page.setRequestInterception(true)
     this.page.on('request', this.onRequestPaused)
     this.page.on('console', async (message) => {
-      console.log(message)
+      console.log(message.text())
       this.onMessageAdded(message.text())
     })
     this.page.on('error', (error) => {
@@ -201,7 +203,7 @@ class ChromeTab {
   async run() {
     this.changeState('running')
     this.startAt = new Date()
-    this.timeout = setTimeout(this.onTimeout, 20_000)
+    this.timeout = setTimeout(this.onTimeout, TEST_TIMEOUT)
 
     await this._retryOnClose(() => this.page.focus('body'))
     this.page.evaluate(`Zen.run(${JSON.stringify(this.test)})`)
@@ -262,7 +264,7 @@ class ChromeTab {
 
   async reload() {
     this.changeState('loading')
-    this.timeout = setTimeout(this.onTimeout, 10 * 1000)
+    this.timeout = setTimeout(this.onTimeout, TEST_TIMEOUT)
     this.codeHash = undefined
     this.requestMap = {}
     console.log(`[${this.id}] reloading`)

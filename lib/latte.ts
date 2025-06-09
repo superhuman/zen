@@ -102,7 +102,7 @@ declare global {
   let helpers: helpers | undefined = undefined
   let currentContext: null | TestContext = null // The context of the currently running test.
   let currentTimeout: number
-  let timeout = 10000
+  let timeout = 20000
 
   let whenCurrentTestFinished: Promise<void> | null = null // promise that's resolved when the currently running test finishes
   let currentTestResolve: null | (() => void) = null
@@ -448,7 +448,7 @@ declare global {
 
     context.zen = helpers || {}
     context.zen.extendRemoteTimeout = (ms: number) => {
-      clearTimeout(currentTimeout)
+      realClearTimeout(currentTimeout)
       setTimeoutPromise(ms)
     }
 

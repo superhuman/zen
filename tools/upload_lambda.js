@@ -30,7 +30,7 @@ files.forEach((file) => {
 
 zip.writeZip(path.join(__dirname, '../build/lambda_code/lambda-code.zip'))
 
-const assetBucket = process.env.ASSET_BUCKET
+const assetBucket = process.env.ASSET_BUCKET // zen-workTests-staging
 const secretAccessKey = process.env.SECRET_ACCESS_KEY
 const accessKeyId = process.env.ACCESS_KEY_ID
 if (!assetBucket || !secretAccessKey || !accessKeyId) {
