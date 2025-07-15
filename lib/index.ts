@@ -6,7 +6,7 @@ import S3Sync from './s3-sync'
 import Journal from './journal'
 import uuidv4 from 'uuid/v4'
 import WebpackAdapter from './webpack'
-import type { metric } from './profiler'
+import Profiler from './profiler'
 
 require('sugar').extend()
 
@@ -83,6 +83,7 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
   Zen.s3Sync = new S3Sync() // Keeps our local files in sync with S3
   Zen.lambda = new AWS.Lambda()
   Zen.journal = new Journal()
+  Zen.profiler = new Profiler({ sessionId: config.sessionId, logger: config.log })
 
   // Without this, node limits our requests and slows down running on lambda
   https.globalAgent.maxSockets = 2000 // TODO multiplex over fewer connections

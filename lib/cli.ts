@@ -5,7 +5,6 @@ import Server from './server'
 import initZen, { Zen } from './index'
 import yargs, { fail } from 'yargs'
 import * as Util from './util.js'
-import * as Profiler from './profiler'
 
 type TestFailure = {
   fullName: string
@@ -105,6 +104,7 @@ async function runTests(
 }
 
 async function run(zen: Zen, opts: CLIOptions) {
+  const testStartTime = Date.now()
   try {
     let t0 = Date.now()
     if (zen.webpack && !opts.reuseBuild) {
@@ -200,10 +200,23 @@ async function run(zen: Zen, opts: CLIOptions) {
       console.log(`🔴 ${test.fullName} (tried ${test.attempts || 1} times)\n ${test.stack || test.error}\nTo View Logs Run: ${remoteLoggingCommand}`)
     }
 
-    if (opts.logging) Profiler.logBatch(metrics)
+    console.log('metrics', metrics)
 
     const failCount = Object.values(runFailures).length
     const flakeCount = Object.values(runFlakes).length
+    if (opts.logging) {
+      metrics.push({
+        name: 'log.zen_test_run',
+        fields: {
+          result: failCount === 0 ? 'pass' : 'fail',
+          fail_count: failCount,
+          flake_count: flakeCount,
+          value: Date.now() - testStartTime
+        }
+      })
+      await zen.profiler.logBatch(metrics)
+    }
+
     console.log(`Took ${Date.now() - t0}ms`)
     if (flakeCount > 0) {
       console.log(`⚠️ ${flakeCount} flaked test${flakeCount === 1 ? '' : 's'}.`)
