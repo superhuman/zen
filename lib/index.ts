@@ -6,12 +6,11 @@ import S3Sync from './s3-sync'
 import Journal from './journal'
 import uuidv4 from 'uuid/v4'
 import WebpackAdapter from './webpack'
-import type { metric } from './profiler'
+import Profiler from './profiler'
 
 require('sugar').extend()
 
 export type ZenConfig = {
-  log?: (metrics: metric[]) => Promise<void>
   appRoot: string
   setDevelopmentHeaders: (req: any, res: any) => void
   port: number
@@ -46,6 +45,7 @@ export type Zen = {
   webpack: WebpackAdapter
   indexHtml: (pageType: string, forS3: boolean) => string
   config: ZenConfig
+  profiler: Profiler
 }
 
 export default async function initZen(configFilePath: string): Promise<Zen> {
@@ -61,13 +61,14 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
   })
 
   // load the config with some defaults
-  let config = Zen.config
+  const config = Zen.config
   config.appRoot = path.resolve(process.cwd(), config.appRoot || '')
   config.port = config.port || 3100
   config.testDependencies = config.testDependencies || []
   config.lambdaConcurrency = config.lambdaConcurrency || 400
   config.htmlTemplate = config.htmlTemplate || '<body>ZEN_SCRIPTS</body>'
   config.sessionId = config.sessionId || uuidv4()
+  config.runId = uuidv4()
   config.useSnapshot === undefined ? true : !!config.useSnapshot
   config.lambdaNames = config.lambdaNames || {
     workTests: 'zen-workTests',
@@ -83,6 +84,7 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
   Zen.s3Sync = new S3Sync() // Keeps our local files in sync with S3
   Zen.lambda = new AWS.Lambda()
   Zen.journal = new Journal()
+  Zen.profiler = new Profiler({ runId: config.runId, logger: config.log })
 
   // Without this, node limits our requests and slows down running on lambda
   https.globalAgent.maxSockets = 2000 // TODO multiplex over fewer connections

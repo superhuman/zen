@@ -1,4 +1,11 @@
-# 2024-11-06 0.3.31
+# 2025-07-14 0.3.33
+
+- Fix logging option
+- Add --filter option to filter tests when debugging.
+- Add --reuseBuild option for speeding up debugging of zen library changes
+- Add sourcemaps to build output for clearer library stacktraces
+
+# 2024-11-06 0.3.32
 
 - reset dev server calling args to old format
 

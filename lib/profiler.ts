@@ -1,17 +1,32 @@
-import Zen from './index'
-
-export type metric = {
+export type Metric = {
   name: string
   fields: Record<string, string | number>
 }
 
-export function logBatch(metrics: metric[]) {
-  let log = Zen.config.log
-  if (!log) return
+type Logger = (metrics: Metric[]) => Promise<void>
 
-  return log(metrics)
+class Profiler {
+  runId: string
+  logger: Logger
+
+  constructor ({ runId, logger }: { runId: string, logger: Logger }) {
+    this.runId = runId
+    this.logger = logger
+  }
+
+  log(name: Metric['name'], fields: Metric['fields'] = {}): Promise<void> {
+    return this.logBatch([{ name, fields }])
+  }
+
+  logBatch (metrics: Metric[]): Promise<void> {
+    return this.logger(
+      metrics.map((metric) => {
+        metric.fields = metric.fields || {}
+        metric.fields.runId = this.runId
+        return metric
+      })
+    )
+  }
 }
 
-export function log(name: metric['name'], fields: metric['fields']) {
-  return logBatch([{ name, fields }])
-}
+export default Profiler

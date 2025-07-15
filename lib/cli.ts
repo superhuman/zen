@@ -4,7 +4,6 @@ import Server from './server'
 import initZen, { Zen } from './index'
 import yargs, { fail } from 'yargs'
 import * as Util from './util.js'
-import * as Profiler from './profiler'
 
 type testFailure = {
   fullName: string
@@ -18,6 +17,8 @@ export type CLIOptions = {
   maxAttempts: number
   debug: boolean
   configFile: string
+  reuseBuild?: boolean
+  filter?: string
 }
 
 yargs(process.argv.slice(2))
@@ -54,6 +55,16 @@ yargs(process.argv.slice(2))
     logging: { type: 'boolean', default: false },
     maxAttempts: { type: 'number', default: 3 },
     debug: { type: 'boolean', default: false },
+    filter: {
+      type: 'string',
+      default: undefined,
+      describe: 'Runs tests that contain the passed filter string.'
+    },
+    reuseBuild: {
+      type: 'boolean',
+      default: false,
+      describe: 'Skips the test repo build and upload process and uses built files on disk. Useful for iterating on zen library changes.'
+    },
   }).argv
 
 type TestResultsMap = Record<string, testFailure>
@@ -130,9 +141,10 @@ function combineFailures(
 }
 
 async function run(zen: Zen, opts: CLIOptions) {
+  const testStartTime = Date.now()
   try {
     let t0 = Date.now()
-    if (zen.webpack) {
+    if (zen.webpack && !opts.reuseBuild) {
       console.log('Webpack building')
       let previousPercentage = 0
       zen.webpack.on(
@@ -146,16 +158,16 @@ async function run(zen: Zen, opts: CLIOptions) {
       )
       await zen.webpack.build()
       console.log(`Took ${Date.now() - t0}ms`)
-    }
 
-    t0 = Date.now()
-    console.log('Syncing to S3')
-    zen.s3Sync.on(
-      'status',
-      (msg: string) => (opts.debug || process.env.DEBUG) && console.log(msg)
-    )
-    await zen.s3Sync.run(zen.indexHtml('worker', true))
-    console.log(`Took ${Date.now() - t0}ms`)
+      t0 = Date.now()
+      console.log('Syncing to S3')
+      zen.s3Sync.on(
+        'status',
+        (msg: string) => (opts.debug || process.env.DEBUG) && console.log(msg)
+      )
+      await zen.s3Sync.run(zen.indexHtml('worker', true))
+      console.log(`Took ${Date.now() - t0}ms`)
+    }
 
     t0 = Date.now()
     console.log('Getting test names')
@@ -165,6 +177,14 @@ async function run(zen: Zen, opts: CLIOptions) {
         sessionId: zen.config.sessionId,
       }
     )
+
+    if (opts.filter) {
+      const filter = opts.filter.trim()
+      console.log(`Filtering tests by "${filter}"`)
+      workingSet = workingSet.filter((testName) => {
+        return testName.includes(filter)
+      })
+    }
 
     // In case there is an infinite loop, this should brick the test running
     let runsLeft = 5
@@ -191,12 +211,13 @@ async function run(zen: Zen, opts: CLIOptions) {
 
     const metrics = []
     let failCount = 0
+    let flakeCount = 0
     for (const test of Object.values(failures || {})) {
       metrics.push({
         name: 'log.test_failed',
         fields: {
           value: test.attempts,
-          testName: test.fullName,
+          test_name: test.fullName,
           time: test.time,
           error: test.error,
         },
@@ -210,11 +231,27 @@ async function run(zen: Zen, opts: CLIOptions) {
           } times)`
         )
       } else if (test.attempts > 1) {
+        flakeCount++
         console.log(`⚠️ ${test.fullName} (flaked ${test.attempts - 1}x)`)
       }
     }
 
-    if (opts.logging) Profiler.logBatch(metrics)
+    if (opts.logging) {
+      metrics.push({
+        name: 'log.zen_test_run',
+        fields: {
+          result: failCount === 0 ? 'pass' : 'fail',
+          fail_count: failCount,
+          flake_count: flakeCount,
+          value: Date.now() - testStartTime
+        }
+      })
+      try {
+        await zen.profiler.logBatch(metrics)
+      } catch (e) {
+        console.error(e)
+      }
+    }
     console.log(`Took ${Date.now() - t0}ms`)
     console.log(
       `${failCount ? '😢' : '🎉'} ${failCount} failed test${
