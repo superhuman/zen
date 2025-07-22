@@ -45,10 +45,8 @@ export type CLIOptions = {
   configFile: string
   reuseBuild?: boolean
   filter?: string
-  showRemoteLogs?: boolean
   headed?: boolean
   limit?: number
-  csv?: boolean
   verbose?: boolean
   deflake?: boolean
 }
@@ -112,15 +110,9 @@ yargs(process.argv.slice(2))
       describe:
         'Skips the test repo build and upload process and uses built files on disk. Useful for iterating on zen library changes.',
     },
-    showRemoteLogs: { type: 'boolean', default: false },
     headed: { type: 'boolean', description: 'Run in headed mode' },
     limit: { type: 'number', default: undefined },
     verbose: { type: 'boolean', default: false },
-    csv: {
-      type: 'boolean',
-      default: false,
-      describe: 'Output test results to CSV file',
-    },
     deflake: {
       type: 'boolean',
       default: false,
