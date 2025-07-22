@@ -18,7 +18,6 @@ type WindowSize = {
 type ChromeTabConfig = {
   skipHotReload: boolean
   failOnExceptions: boolean
-  useAssetServer?: boolean
 }
 type ChromeTabState =
   | 'starting'
@@ -124,6 +123,13 @@ class ChromeTab {
       (args: { width: number; height: number }) => {
         if (this.closed) return
         this.resizeWindow(args)
+      }
+    )
+
+    await this.page.exposeFunction(
+      'zenIsHeaded',
+      () => {
+        return this.headed
       }
     )
   }

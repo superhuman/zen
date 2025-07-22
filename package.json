@@ -12,8 +12,7 @@
     "build": "node ./build.js",
     "start": "node ./build.js -w",
     "prepare": "npm run build",
-    "tools:upload-lambda": "node ./tools/upload_lamda_function_code.js",
-    "tools:remote-logs": "node ./tools/print_remote_logs.js "
+    "tools:upload-lambda": "node ./tools/upload_lamda_function_code.js"
   },
   "repository": {
     "type": "git",

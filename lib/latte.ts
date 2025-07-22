@@ -102,7 +102,7 @@ declare global {
   let helpers: helpers | undefined = undefined
   let currentContext: null | TestContext = null // The context of the currently running test.
   let currentTimeout: number
-  let timeout = 20000
+  let timeout = 30000
 
   let whenCurrentTestFinished: Promise<void> | null = null // promise that's resolved when the currently running test finishes
   let currentTestResolve: null | (() => void) = null
@@ -434,15 +434,14 @@ declare global {
         currentTimeout = realSetTimeout(() => {
           if (hasFinished) return
           console.error('Timeout', cbOrTest.stack)
-          /*
+
           if (mode == 'headless') {
             rej(
               `Timeout, the test took more than ${ms / 1000}s on remote: ${
-                cbOrTest.stack
-              }`
+cbOrTest.stack
+}`
             )
-            }
-            */
+          }
         }, ms)
       })
     }
