@@ -7,7 +7,7 @@ import http from 'http'
 import { execSync } from 'child_process'
 import { URL } from 'url'
 
-const DEFAULT_BROWSER_WIDTH = 1600
+const DEFAULT_BROWSER_WIDTH = 1300
 const DEFAULT_BROWSER_HEIGHT = 1000
 
 type WindowSize = {
@@ -385,10 +385,15 @@ export default class ChromeWrapper {
     windowSize: WindowSize
     headed?: boolean
   }): Promise<void> {
+    let devtoolsWidth = 0
+    // Add a little width for the devtools
+    if (headed) {
+      devtoolsWidth = 400
+    }
     const localChromeFlags = [
       '--headless',
       '--disable-gpu',
-      `--window-size=${DEFAULT_BROWSER_WIDTH},${DEFAULT_BROWSER_HEIGHT}`
+      `--window-size=${DEFAULT_BROWSER_WIDTH + devtoolsWidth},${DEFAULT_BROWSER_HEIGHT}`
     ]
 
     this.s3 = new S3Client({ region: this.awsRegion })
