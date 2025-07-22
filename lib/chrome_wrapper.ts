@@ -80,8 +80,6 @@ class ChromeTab {
     }
     this.state = 'starting'
     this.timeout = setTimeout(this.onTimeout, 10_000)
-    this.requestMap = {}
-    this.requestedIds = {}
 
     this.page.on('console', async (message) => {
       console.log(message.text())
@@ -175,7 +173,27 @@ class ChromeTab {
   }
 
   async getTestNames() {
-    return this._evaluate(`Latte.flatten().map(t => t.fullName)`)
+    const promise = new Promise((resolve, reject) => {
+      this.listRequest = { resolve, reject }
+    })
+
+    if (this.state === 'idle') {
+      this.listTests()
+    }
+
+    return promise
+  }
+
+  async listTests() {
+    try {
+      const results = await this._evaluate(`Latte.flatten().map(t => t.fullName)`)
+      if (!this.listRequest) {
+        throw new Error('this.listRequest is not defined when listing tests')
+      }
+      this.listRequest.resolve(results)
+    } catch (e) {
+      this.listRequest.reject(e.message)
+    }
   }
 
   _evaluate(code: string) {
@@ -201,14 +219,10 @@ class ChromeTab {
     this.timeout = setTimeout(this.onTimeout, TEST_TIMEOUT)
 
     try {
-      if (!this.closed && !this.page.isClosed()) {
-        await this.page.focus('body')
-        await this.page.evaluate(`Zen.run(${JSON.stringify(this.test)})`)
-      }
+      await this.page.focus('body')
+      await this.page.evaluate(`Zen.run(${JSON.stringify(this.test)})`)
     } catch (e) {
-      if (!this.closed) {
-        this.failTest('Error during test execution', e.stack || '')
-      }
+      this.failTest('Error during test execution', e.stack || '')
     }
   }
 
@@ -238,8 +252,7 @@ class ChromeTab {
     this.changeState('loading')
     this.timeout = setTimeout(this.onTimeout, TEST_TIMEOUT)
     this.codeHash = undefined
-    this.requestMap = {}
-
+    console.log(`[${this.id}] reloading`)
     this.page.reload()
   }
 

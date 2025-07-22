@@ -416,17 +416,6 @@ async function run(zen: Zen, opts: CLIOptions) {
 
     testRunMeasure.mark(`Test Name Get Time`)
 
-    // In case there is an issue with the lamda retry mechanism we
-    // cap the number of times we will try to prevent going into an
-    // infinite loop. The actual retrying is happening on the lamdaWorker.
-    const INFINITE_LOOP_BREAKER = opts.maxAttempts + 1
-
-    type TestResult = {
-      name: string
-      result: 'pass' | 'fail'
-      duration: number
-      error?: string
-    }
     console.log(
       `Running ${workingSet.length} test${workingSet.length > 1 ? 's' : ''}`
     )
@@ -449,7 +438,7 @@ async function run(zen: Zen, opts: CLIOptions) {
         for (const testRun of testRuns) {
           attempt++
           metrics.push({
-            name: 'log.zen_single_test_run',
+            name: 'log.zen_single_test_result',
             fields: {
               ...testRun,
               attempt,
@@ -459,7 +448,7 @@ async function run(zen: Zen, opts: CLIOptions) {
       }
 
       metrics.push({
-        name: 'log.zen_test_results',
+        name: 'log.zen_test_run',
         fields: {
           ...testRunMeasure.getMetric(),
           result: resultStatistics.failCount === 0 ? 'pass' : 'fail',
@@ -484,6 +473,8 @@ async function run(zen: Zen, opts: CLIOptions) {
       opts,
     })
 
+    // Prevent process from exiting in headed so developer can
+    // freely interact with chrome devtools.
     if (opts.headed) {
       const forever = new Promise(() => {})
       await forever
@@ -607,8 +598,6 @@ function printRunStatistics({
     testRunMeasure.getMarks().forEach((mark) => {
       console.log(`- ${mark.name}: ${getHumanReadableTime(mark.duration)}`)
     })
-
-    // TODO: output statistics on the groups ran. Slowest group in run etc.
   }
 
   if (opts.deflake && flakedTests.length) {
