@@ -126,12 +126,9 @@ class ChromeTab {
       }
     )
 
-    await this.page.exposeFunction(
-      'zenIsHeaded',
-      () => {
-        return this.headed
-      }
-    )
+    await this.page.exposeFunction('zenIsHeaded', () => {
+      return this.headed
+    })
   }
 
   async resizeWindow({ width, height }: { width: number; height: number }) {
@@ -393,7 +390,9 @@ export default class ChromeWrapper {
     const localChromeFlags = [
       '--headless',
       '--disable-gpu',
-      `--window-size=${DEFAULT_BROWSER_WIDTH + devtoolsWidth},${DEFAULT_BROWSER_HEIGHT}`
+      `--window-size=${
+        DEFAULT_BROWSER_WIDTH + devtoolsWidth
+      },${DEFAULT_BROWSER_HEIGHT}`,
     ]
 
     this.s3 = new S3Client({ region: this.awsRegion })
@@ -427,7 +426,11 @@ export default class ChromeWrapper {
         debuggingPort: 9222,
         executablePath: executablePath,
         env: { ...process.env, TZ: 'America/New_York' },
-        args: chromium.args.concat(['--enable-logging', '--log-level=0', `--window-size=${DEFAULT_BROWSER_WIDTH},${DEFAULT_BROWSER_HEIGHT}`]),
+        args: chromium.args.concat([
+          '--enable-logging',
+          '--log-level=0',
+          `--window-size=${DEFAULT_BROWSER_WIDTH},${DEFAULT_BROWSER_HEIGHT}`,
+        ]),
         ignoreHTTPSErrors: true,
         headless: true,
       })
@@ -595,7 +598,7 @@ export default class ChromeWrapper {
     const page = await browser.newPage()
     page.setViewport({
       width: DEFAULT_BROWSER_WIDTH,
-      height: DEFAULT_BROWSER_HEIGHT
+      height: DEFAULT_BROWSER_HEIGHT,
     })
     // set 5 mins timeout to reduce test flake on navigation timeout
     await page.setDefaultNavigationTimeout(5 * 60 * 1000)

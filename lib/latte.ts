@@ -438,8 +438,8 @@ declare global {
           if (mode == 'headless') {
             rej(
               `Timeout, the test took more than ${ms / 1000}s on remote: ${
-cbOrTest.stack
-}`
+                cbOrTest.stack
+              }`
             )
           }
         }, ms)

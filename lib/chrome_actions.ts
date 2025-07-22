@@ -38,13 +38,13 @@ class ChromeActions {
         awsRegion,
         testNames,
         sessionId,
-        headed: this.headed
+        headed: this.headed,
       })
     } else {
       return this.zen.lambdaInvoke(this.zen.config.lambdaNames.workTests, {
         testNames,
         sessionId,
-        awsRegion
+        awsRegion,
       })
     }
   }
