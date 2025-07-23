@@ -175,7 +175,35 @@ async function runTestGroupOnLambda(chromeActions, group) {
   }
 }
 
-async function runTests(
+async function runTestsHeaded(zen: Zen, opts: CLIOptions, tests: string[]) {
+  const chromeActions = new ChromeActions({ headed: opts.headed, zen })
+  const testResults: Record<string, TestResult[]> = {}
+
+  const lambdaTestResults: LambdaTestResult[] = await runTestGroupOnLambda(
+    chromeActions,
+    { tests, time: 0 }
+  )
+
+  for (const lambdaResult of lambdaTestResults) {
+    const testName = lambdaResult.fullName
+    if (!testResults[testName]) {
+      testResults[testName] = []
+    }
+
+    testResults[testName].push({
+      name: lambdaResult.fullName,
+      result: lambdaResult.error ? 'fail' : 'pass',
+      duration: lambdaResult.time,
+      error: lambdaResult.error,
+      logStream: lambdaResult.logStream,
+      requestId: lambdaResult.requestId,
+    })
+  }
+
+  return testResults
+}
+
+async function runTestsHeadless(
   zen: Zen,
   opts: CLIOptions,
   tests: string[]
@@ -308,11 +336,13 @@ async function run(zen: Zen, opts: CLIOptions) {
     console.log(
       `Running ${workingSet.length} test${workingSet.length > 1 ? 's' : ''}`
     )
-    const testResults: Record<string, TestResult[]> = await runTests(
-      zen,
-      opts,
-      workingSet
-    )
+
+    let testResults: Record<string, TestResult[]> = {}
+    if (opts.headed) {
+      testResults = await runTestsHeaded(zen, opts, workingSet)
+    } else {
+      testResults = await runTestsHeadless(zen, opts, workingSet)
+    }
 
     testRunMeasure.mark('Run Tests')
 

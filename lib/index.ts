@@ -121,10 +121,18 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
       .map((d) => `<script src='${d}'></script>`)
 
     // NB it's important that we don't include the config when the index is uploaded to S3
-    let cfg = pageType == 'head' ? config : {}
-    scripts.unshift(`<script>
-window.Zen = {config: ${JSON.stringify(cfg)}}
-</script>`)
+    let cfg =
+      pageType == 'head'
+        ? {
+            aws: config.aws,
+            lambdaNames: config.lambdaNames,
+            proxyUrl: config.proxyUrl,
+          }
+        : {}
+
+    scripts.unshift(
+      `<script>window.Zen = {config: ${JSON.stringify(cfg)}}</script>`
+    )
 
     return config.htmlTemplate.replace('ZEN_SCRIPTS', scripts.join('\n'))
   }

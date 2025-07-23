@@ -46,9 +46,7 @@ const productionConfig = {
 const program = new Command()
 
 program
-  .description(
-    'Update existing AWS Lambda function with new code.'
-  )
+  .description('Update existing AWS Lambda function with new code.')
   .version('1.0.0')
   .requiredOption('--env <env>', 'Environment (production|staging)', 'staging')
 

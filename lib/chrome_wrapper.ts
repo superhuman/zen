@@ -81,9 +81,21 @@ class ChromeTab {
     this.state = 'starting'
     this.timeout = setTimeout(this.onTimeout, 10_000)
 
+    /*
     this.page.on('console', async (message) => {
-      console.log(message.text())
+      const args = message.args()
+      const logValues = await Promise.all(
+        args.map(async (arg) => {
+          try {
+            return await arg.jsonValue()
+          } catch {
+            return arg.toString()
+          }
+        })
+      )
+      console.log(...logValues)
     })
+    */
 
     // Expose functions for direct calls from the page
     this.setupExposedFunctions()
@@ -263,7 +275,7 @@ class ChromeTab {
       return
     }
 
-    if (this.state === 'loading') {
+    if (this.state === 'loading' && this.rejectWork) {
       console.log(`[${this.id}] timeout while loading`)
       // In the case we timed out on loading this indicates our browser
       // process isn't loading at all. In this case we want to kill and restart

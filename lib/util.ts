@@ -2,9 +2,10 @@ import connect from 'connect'
 import serveStatic from 'serve-static'
 import path from 'path'
 import fs from 'fs'
-import svelte from 'svelte'
+const svelte = require('svelte')
 import fetch from 'node-fetch'
-import { camelCase } from 'lodash'
+import WebSocket from 'ws'
+import { camelCase, upperFirst } from 'lodash'
 
 let iconCache: string | null = null
 
@@ -54,7 +55,7 @@ class Util {
       fs.readdirSync(root).map(async (fname) => {
         if (!fname.match(/([\w_\-]+)\.svg$/)) return null
         // @ts-expect-error Unclear why this thinks its unknown.
-        icons[camelCase(RegExp.$1)] = await Util.readFileAsync(
+        icons[upperFirst(camelCase(RegExp.$1))] = await Util.readFileAsync(
           path.join(root, fname)
         )
       })
