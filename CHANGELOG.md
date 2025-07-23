@@ -24,7 +24,7 @@
   - I took the shortest path here allowing `any` etc. Existing types were failing badly and I wanted typing for my changes but didn't want to spend much time on it.
 - Switches asset serving strategy to use local dev server instead of request interception. I found request interception stall on serving wasm files.
 - Remove .eslintrc. Tons of linting was failing so I'm removing it for now.
-- Add ` > ` in between different test parts so its easier to grep for test.
+- Add `>` in between different test parts so its easier to grep for test.
 - Add display of remote logs url in output + other terminal output display changes.
 
 # 2025-07-14 0.3.33

@@ -6,7 +6,6 @@ const {
   LambdaClient,
   GetFunctionCommand,
   UpdateFunctionCodeCommand,
-  PublishLayerVersionCommand,
 } = require('@aws-sdk/client-lambda')
 const AdmZip = require('adm-zip')
 const path = require('path')
@@ -28,25 +27,32 @@ const CHROMIUM_LAYER_DEPENDENCIES = ['@sparticuz/chromium']
 
 const stagingConfig = {
   functionNames: ['zen-workTests-staging', 'zen-listTests-staging'],
-  layerName: 'zen-dependencies-staging',
-  bucketName: 'zen-module-bucket-staging',
 }
 
 const productionConfig = {
   functionNames: ['zen-workTests-production', 'zen-listTests-production'],
-  layerName: 'zen-dependencies-production',
 }
+
+// TODO: automatically upload the layers as well
+// Production:
+// zen-dependencies-production
+// chromium-staging-production
+
+// Staging
+// zen-dependencies-staging
+// chromium-staging
+
+
 
 // Configure Commander.js
 const program = new Command()
 
 program
   .description(
-    'Update existing AWS Lambda function with new code. Use --layer flag to upload layer dependencies.'
+    'Update existing AWS Lambda function with new code.'
   )
   .version('1.0.0')
   .requiredOption('--env <env>', 'Environment (production|staging)', 'staging')
-  .option('--layer', 'Upload layer dependencies')
 
 // Parse command line arguments
 program.parse()
@@ -61,10 +67,6 @@ if (isProduction) {
 }
 
 const ZIP_PATH = path.join(__dirname, '../build/lambda_code/lambda-code.zip')
-const LAYER_ZIP_PATH = path.join(
-  __dirname,
-  '../build/lambda_code/layer-code.zip'
-)
 
 if (!process.env.SECRET_ACCESS_KEY || !process.env.ACCESS_KEY_ID) {
   console.log('You need to set AWS premissions to do the upload')
@@ -117,25 +119,6 @@ function buildAndZipCode() {
   zip.writeZip(ZIP_PATH)
 }
 
-function buildAndZipLayer() {
-  const zip = new AdmZip()
-  const nodeModulesPath = path.join(__dirname, '../lambda_assets/node_modules')
-
-  execSync('yarn install', {
-    cwd: path.join(__dirname, '../lambda_assets'),
-    stdio: 'inherit',
-  })
-
-  // Add node_modules if it exists
-  if (fs.existsSync(nodeModulesPath)) {
-    zip.addLocalFolder(nodeModulesPath, 'nodejs/node_modules')
-  } else {
-    throw new Error(`${nodeModulesPath} missing!`)
-  }
-
-  zip.writeZip(LAYER_ZIP_PATH)
-}
-
 // Check if Lambda function exists
 async function functionExists(functionName) {
   try {
@@ -160,68 +143,6 @@ function readZipFile() {
     return fs.readFileSync(ZIP_PATH)
   } catch (error) {
     log(`Error reading ZIP file: ${error.message}`, 'red')
-    throw error
-  }
-}
-
-// Read layer ZIP file
-function readLayerZipFile() {
-  try {
-    return fs.readFileSync(LAYER_ZIP_PATH)
-  } catch (error) {
-    log(`Error reading layer ZIP file: ${error.message}`, 'red')
-    throw error
-  }
-}
-
-// Upload layer using S3
-async function uploadLayer({ layerName, bucketName }) {
-  log(`Uploading layer: ${layerName}...`, 'yellow')
-
-  const zipBuffer = readLayerZipFile()
-  const s3 = new S3Client({
-    credentials: {
-      secretAccessKey: process.env.SECRET_ACCESS_KEY,
-      accessKeyId: process.env.ACCESS_KEY_ID,
-    },
-    region: 'us-west-1',
-  })
-
-  try {
-    const bucketName = 'zen-module-bucket-staging'
-    const s3Key = `layers/${layerName}.zip`
-
-    // Upload to S3
-    log(`Uploading layer to S3: ${bucketName}/${s3Key}`, 'yellow')
-    await new Upload({
-      client: s3,
-      params: {
-        Bucket: bucketName,
-        Key: s3Key,
-        Body: zipBuffer,
-      },
-    }).done()
-
-    log(`Layer uploaded to S3 successfully!`, 'green')
-
-    // Publish layer from S3
-    const publishLayerParams = {
-      LayerName: layerName,
-      Content: {
-        S3Bucket: bucketName,
-        S3Key: s3Key,
-      },
-    }
-
-    const result = await lambda.send(
-      new PublishLayerVersionCommand(publishLayerParams)
-    )
-    log(`Layer published successfully! Version: ${result.Version}`, 'green')
-    log(`Layer ARN: ${result.LayerArn}`, 'green')
-
-    return result
-  } catch (error) {
-    log(`Error uploading layer ${layerName}: ${error.message}`, 'red')
     throw error
   }
 }
@@ -304,21 +225,8 @@ async function deploy() {
   try {
     log('AWS Lambda Update Script', 'yellow')
     console.log(`Functions: ${lambdaConfig.functionNames.join(', ')}`)
-    if (lambdaConfig.layerName) {
-      console.log(`Layer: ${lambdaConfig.layerName}`)
-    }
 
     buildAndZipCode()
-
-    // Handle layer upload if specified
-    if (lambdaConfig.layerName && options.layer) {
-      log('\nBuilding and uploading layer...', 'yellow')
-      buildAndZipLayer()
-      await uploadLayer({
-        layerName: lambdaConfig.layerName,
-        bucketName: lambdaConfig.bucketName,
-      })
-    }
 
     const functionArns = []
     let allSuccess = true

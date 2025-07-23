@@ -186,7 +186,9 @@ class ChromeTab {
 
   async listTests() {
     try {
-      const results = await this._evaluate(`Latte.flatten().map(t => t.fullName)`)
+      const results = await this._evaluate(
+        `Latte.flatten().map(t => t.fullName)`
+      )
       if (!this.listRequest) {
         throw new Error('this.listRequest is not defined when listing tests')
       }

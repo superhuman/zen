@@ -31,9 +31,9 @@ type LambdaTestResult = {
 type LambdaTestResults = Record<string, LambdaTestResult>
 type TestResultStatistics = {
   failCount: number
-  flakeCount: number
   passCount: number
-  flakedTests: string[]
+  userLevelFlakedTests: string[]
+  frameworkLevelFlakedTests: string[]
   failedTests: string[]
   passedTests: string[]
 }
@@ -80,7 +80,7 @@ yargs(process.argv.slice(2))
       const zen = await initZen(argv.configFile)
 
       if (argv.maxAttempts === undefined) {
-        argv.maxAttempts = argv.deflake ? 10 : 3
+        argv.maxAttempts = argv.deflake ? 20 : 3
       }
 
       if (argv.headed) {
@@ -119,113 +119,6 @@ yargs(process.argv.slice(2))
       describe: 'Run the tests many times to track down flakes.',
     },
   }).argv
-
-const SKIPPED_TESTS = [
-  'MessageBody > signature detection > via miscellaneous content > should show content before the dash in this message',
-  'ReadStatus > details > regular (non-shared) read statuses > when some of the reads are from the same user, device, and within the same minute > should show only one read',
-  'ReadStatus > details > regular (non-shared) read statuses > when the reads are from known email addresses > should show the reads in sorted order on hover',
-  'Calendar edit event > keyboard navigation > should clear out the timezone field without prompting for discard when pressing escape',
-  'Calendar edit event > keyboard navigation > should close the timezone suggestion dropdown that appears after clearing out the field when pressing escape',
-  'ThreadMessages Scroll > On send > should not scroll messages out of view after expanding and collapsing a message',
-  'ThreadMessages Scroll > On scroll down > should not scroll messages out of view after expanding and collapsing a message',
-  'ThreadMessages Scroll > On jump down > should not scroll messages out of view after expanding and collapsing a message',
-  'ThreadMessages Scroll > On compose > when the focused message is near the bottom of the screen > replying to a short message should put the bottom of the compose form 180px from the bottom of the page',
-  'ThreadMessages Scroll > On compose > when the compose form would be hidden by the ThreadPane-header > replying should scroll the compose form to the middle of the page',
-  'CalendarCreateEvent > Undo > undoing an all-day event > should show the event when undoing an all day event',
-  'ImagePreProcessor > should not flip images on chrome >= 81',
-  'SplitInbox > (microsoft):  > should correctly handle removing a message from a Starred split',
-  `AI TLDR > remote summary updates > should silently update the summary if the summary is updated after the user clicks "show new messages"`,
-  `Calendar edit event > submission > (microsoft):  > should correctly submit timezone updates to the backend`,
-  `ReadStatus > details > regular (non-shared) read statuses > when some of the reads have a known email, and some do not > should show the reads in sorted order on hover`,
-  `ReadStatus > details > regular (non-shared) read statuses > when the readers have similar names > should disambiguate their names as much as possible`,
-  `CalendarCreateEvent > Instant Event > With AI enabled > should create an instant event from Command Palette in draft`,
-  `ReadStatus > details > regular (non-shared) read statuses > should include the upsell under the footer of the hover tooltip when can add to team`,
-  `ReadStatus > details > regular (non-shared) read statuses > when the reads are not associated with any particular email address > should show the reads in sorted order on hover`,
-  `AI Agent > Create Calendar Event > should only show the event if there is no more content other than the xml`,
-  `ReadStatus > details > shared read statuses > should have a sticky header and footer`,
-  `BulkRefer > BulkReferScreen state > should include the referred contact at the top of the list`,
-  `Multiplayer shared threads > Share thread dialog > when a thread has been shared > should not filter out non-teammates`,
-  `(microsoft): Outlook Calendar > (microsoft): description rendering > shows the description field in the sidebar event`,
-  'Delete Events > (microsoft):  > (microsoft): single events > (microsoft): Undoing the deletion > should return the event',
-  'Modifier disk > getNextModifierToPersistAsync > should prefer the send_mail even if the delayed modifier is older',
-  'Share availability > (google) > invitees > should display an avatar stack with at most 8 avatars (organizer included) in the collapsed menu',
-  'Share availability > (google) > invitees > should display an avatar stack with at most 8 avatars (organizer included) in the collapsed menu',
-  'Share availability > (google) > invitees > should display an avatar stack with at most 8 avatars (organizer included) in the collapsed menu',
-  'features/CalendarInvites > should authorize with Google if a user selects Google within the sidebar',
-  'BulkRefer > BulkReferScreen state > should allow dismissing a suggestion with the mouse',
-  'BulkRefer > should populate the names from the contact store',
-  'improved scrolling > direct share > should scroll to the last message if joined by clicking a link',
-  'improved scrolling > direct share > should scroll to the closest message to when the user was added if the thread is fully unread',
-  'Meet With > transitions between states > in SYW (google) should allow dragging all-day events to edit even when Meet With has an attendee',
-  'features/CalendarInvites > should authorize with Microsoft if a user selects Microsoft within the sidebar',
-  'features/CalendarInvites > authorize calendar aliases > should authorize with Microsoft if a user selects Microsoft within the alert',
-  'features/CalendarInvites > authorize calendar aliases > should authorize with Google if a user selects Google within the alert',
-  'AI Agent > Create Calendar Event > Displays zoom call when link is zoom',
-  'AI Agent > AI Agent chat > should go to thread when clicking on source when blank draft is opened',
-  'AI Agent > AI Agent chat > should go to thread when clicking on source when draft with content is opened',
-  'AI Agent > Create Calendar Event > should show create event UI when there is a calendar event in the response',
-  'AI Agent > Create draft card > should show the reply draft card',
-  'SeeYourWeek > All Day Events > should render many all day events',
-  'AI Agent > AI Agent chat > should show sources in order when retrievals are returned in multiple events',
-  'AI Agent > AI Agent chat > should let user expand sources when there is citation',
-  'AI Agent > AI Agent chat > should show sources when there are citations in the answer',
-  'AI Agent > AI Agent chat > should return answer for the question',
-  'AI Agent > AI Agent answer render > should render without triple backtick',
-  'ComposeForm > should keep inline images added before editing the subject line in forwards',
-  'LoadInlineImages > (microsoft): inline attachments from o365 > should be rendered',
-  'RightPane > should reset the right pane when switching matchers',
-  'Footer > Recent Opens > should toggle disableActivityFeed when clicked',
-  'ThreadList > should support loading a large number of threads',
-  'ReadStatus > checkboxes > should show the double checkmark when the message has a reply but no reads',
-  'ReadStatus > checkboxes > should show the double checkmark when the message has a draft but no reads',
-  'ThreadMessagesHeader > should remove readstatus tooltip when pressing esc in threadlist',
-  'ProfilePictureCache > deletes memory and cache storage for Google string based profile pictures',
-  'ProfilePictureCache > deletes memory and cache storage for o365 Blob based profile pictures',
-  'editor/autocorrection > inside squire > correct casing > two capital letters in token > capitals at start, lower score, contact',
-  `AI compose > cleaning response > shouldn't strip signoffs if user has signoff in userdata`,
-  `Auto Labels > Edit Auto Label Dialog > should delete an Auto Label`,
-  `Auto Label Library > should scroll the category list into view when clicking a particular category`,
-  `Debouncer > throttleForOperation > should not call the throttled function again if called after the timeout but before function finished if the operation has finished`,
-  `BulkRefer > SendBulkReferAction > should run a SendBulkReferAction when clicking "Send Referrals"`,
-  `BulkRefer > BulkReferScreen state > should disallow selecting a dismissed suggestion`,
-  `HubspotEditContact > Edit form via cmd+k > should open the contact form via cmd+k edit`,
-  `HubspotEditContact > Edit form via cmd+k > should focus correct form field if editing field via cmd+k`,
-  `Backdrop > should reload the background image immediately when the network comes back online`,
-  `Multiplayer shared threads > Share thread dialog > when a thread hasn't been shared yet > copy link confirmation dialog > shouldn't list anyone if no teammates are on the thread`,
-  `features/Quick Tips > Quick Tips > should show thread message tips when navigating back from SYW after creating calendar`,
-  `SplitInbox > Auto labels in splits > Auto label creation from split > should preserve changes made to the name and query in an existing split before entering the "create a new auto label flow"`,
-  `SplitInbox > Auto labels in splits > Auto label creation from split > should preserve changing the join type in an existing split before entering the create a new auto label flow`,
-  `features/snippets > snippets folder > Snippet metrics > sorts by column`,
-  `features/snippets > snippets folder > should show the calendar sidebar when requested`,
-  `SplitInbox > News split > should not show a thread list top status when defined`,
-  `(microsoft): MoveAction > can move a thread from a custom split to another folder`,
-  `(microsoft): MoveAction > can undo a move to important`,
-  `(microsoft): MoveAction > can move a thread from "Other" to another folder`,
-  `(microsoft): MoveAction > supports \`undo\` on moves where only some messages are in the source folder`,
-  `(microsoft): MoveAction > can move threads to important`,
-  'AI Agent > AI Agent answer render > should render without triple backticks',
-  'AI Agent > Create Calendar Event > When create event and press edit, the popout view should move, and when dismissed, the view should return to its original position',
-  'Share availability > (google) > invitees > should display at most 8 attendees and a message with the remaining attendees amount',
-  'AI Agent > AI Agent chat > should render calendar sources',
-  'BulkRefer > BulkReferScreen state > should restore the state when undoing the send including unselected new contacts',
-  'BulkRefer > BulkReferScreen state > should keep the state of the refer screen when closing and reopening',
-  'HubspotEditContact > Edit form via cmd+k > should focus first field if editing object via cmd+k',
-  'Multiplayer shared threads > tooltip > should show the list of participants including the publisher',
-  'SplitInbox > Auto labels in splits > Auto label creation from split > should be able to add an auto label before creating a new auto label',
-  'AI Agent > AI Agent chat > should show user copy button',
-  'AI Agent > AI Agent chat > should show sources when retrievals are returned in a single events',
-  'SplitInbox > (microsoft):  > should correctly show messages in important/other',
-  'Select All > Hint > should display correct copy on select all',
-  'improved scrolling > oldest unread at-mention > should fall back to message unread state if thread bumps are missing',
-  'improved scrolling > direct share > should scroll to the closest comment to when the user was added when the thread is fully unread',
-  'improved scrolling > direct share > should not scroll to the timestamp in the presence of an unread at-mention',
-  'BacktickAsEscape > popup > should open the popup and set the setting on close',
-  '(demo account): demo account > Displays the auto-draft auto-reminder in the thread list',
-  'AI Agent > AI Agent answer render > should render links with the right attributes',
-  '(demo account): demo account > shows the share thread modal on the teams path',
-  'SyncBackward > with cached threads > should not call onThreadSaved with threads that were cached',
-  'improved scrolling > oldest unread at-mention > should only scroll to unread mentions',
-]
 
 const COMMON_FRAMEWORK_ERRORS = [
   'Puppeteer stalled',
@@ -396,15 +289,7 @@ async function run(zen: Zen, opts: CLIOptions) {
 
     console.log('Getting test names')
 
-    let workingSet: string[]
-    workingSet = await chromeActions.listTests()
-    workingSet = workingSet.filter((testName) => {
-      return !SKIPPED_TESTS.includes(testName)
-    })
-
-    if (opts.limit) {
-      workingSet = workingSet.slice(0, opts.limit)
-    }
+    let workingSet: string[] = await chromeActions.listTests()
 
     if (opts.filter) {
       const filter = opts.filter.trim()
@@ -412,6 +297,10 @@ async function run(zen: Zen, opts: CLIOptions) {
       workingSet = workingSet.filter((testName) => {
         return testName.includes(filter)
       })
+    }
+
+    if (opts.limit) {
+      workingSet = workingSet.slice(0, opts.limit)
     }
 
     testRunMeasure.mark(`Test Name Get Time`)
@@ -453,7 +342,9 @@ async function run(zen: Zen, opts: CLIOptions) {
           ...testRunMeasure.getMetric(),
           result: resultStatistics.failCount === 0 ? 'pass' : 'fail',
           fail_count: resultStatistics.failCount,
-          flake_count: resultStatistics.flakeCount,
+          user_flake_count: resultStatistics.userLevelFlakedTests.length,
+          framework_flake_count:
+            resultStatistics.frameworkLevelFlakedTests.length,
           total_count: resultStatistics.failCount + resultStatistics.passCount,
         },
       })
@@ -470,7 +361,6 @@ async function run(zen: Zen, opts: CLIOptions) {
       resultStatistics,
       testResults,
       testRunMeasure,
-      opts,
     })
 
     // Prevent process from exiting in headed so developer can
@@ -514,7 +404,10 @@ function getHumanReadableTime(timeInMs: number): string {
 function generateTestResultStatistics(
   testResults: TestResults
 ): TestResultStatistics {
-  const flakedTests: string[] = []
+  // Flakes that came from within the zen framework.
+  const frameworkLevelFlakedTests: string[] = []
+  // Flakes that came from the user written test level.
+  const userLevelFlakedTests: string[] = []
   const failedTests: string[] = []
   const passedTests: string[] = []
 
@@ -523,11 +416,22 @@ function generateTestResultStatistics(
     const testAttempts = testRuns.length
     const didPass = testRuns.some((testRun) => testRun.result === 'pass')
     const hasFailed = testRuns.some((testRun) => testRun.result === 'fail')
+    // TODO: get a more robust way of identifying framework vs user error instead of string matching.
+    const hasUserLevelFail = testRuns.some((testRun) => {
+      return (
+        testRun.result === 'fail' &&
+        COMMON_FRAMEWORK_ERRORS.every(
+          (frameworkError) => !testRun.error.includes(frameworkError)
+        )
+      )
+    })
 
     if (didPass) {
       passedTests.push(testName)
-      if (hasFailed) {
-        flakedTests.push(testName)
+      if (hasFailed && hasUserLevelFail) {
+        userLevelFlakedTests.push(testName)
+      } else if (hasFailed) {
+        frameworkLevelFlakedTests.push(testName)
       }
     } else {
       failedTests.push(testName)
@@ -536,9 +440,9 @@ function generateTestResultStatistics(
 
   return {
     passCount: passedTests.length,
-    flakeCount: flakedTests.length,
     failCount: failedTests.length,
-    flakedTests,
+    frameworkLevelFlakedTests,
+    userLevelFlakedTests,
     failedTests,
     passedTests,
   }
@@ -548,24 +452,56 @@ function printRunStatistics({
   resultStatistics,
   testResults,
   testRunMeasure,
-  opts,
 }: {
   resultStatistics: TestResultStatistics
   testResults: TestResults
   testRunMeasure: Measure
-  opts: CLIOptions
 }) {
-  const { flakedTests, failedTests, passedTests } = resultStatistics
+  const {
+    frameworkLevelFlakedTests,
+    userLevelFlakedTests,
+    failedTests,
+    passedTests,
+  } = resultStatistics
   const performanceMetric = testRunMeasure.getMetric()
 
-  if (flakedTests.length) {
-    printHeading('Flaked Tests')
-    for (const testName of flakedTests) {
+  if (process.env.VERBOSE === 'true' && frameworkLevelFlakedTests.length) {
+    printHeading('Framework Level Flaked Tests')
+    for (const testName of frameworkLevelFlakedTests) {
       const testRuns = testResults[testName]
       const testAttempts = testRuns.length
       console.log(`⚠️ ${testName} (flaked ${testAttempts - 1}x)`)
       testRuns.forEach((test) => {
-        if (test.error) {
+        if (
+          test.error &&
+          COMMON_FRAMEWORK_ERRORS.some((frameworkError) =>
+            test.error.includes(frameworkError)
+          )
+        ) {
+          console.log(test.error)
+
+          if (test.logStream) {
+            console.log(`logStream: ${test.logStream}`)
+          }
+          console.log('')
+        }
+      })
+    }
+  }
+
+  if (userLevelFlakedTests.length) {
+    printHeading('Flaked Tests')
+    for (const testName of userLevelFlakedTests) {
+      const testRuns = testResults[testName]
+      const testAttempts = testRuns.length
+      console.log(`⚠️ ${testName} (flaked ${testAttempts - 1}x)`)
+      testRuns.forEach((test) => {
+        if (
+          test.error &&
+          COMMON_FRAMEWORK_ERRORS.every(
+            (frameworkError) => !test.error.includes(frameworkError)
+          )
+        ) {
           console.log(test.error)
 
           if (test.logStream) {
@@ -600,35 +536,6 @@ function printRunStatistics({
     })
   }
 
-  if (opts.deflake && flakedTests.length) {
-    printHeading('Deflake Report')
-    flakedTests.forEach((testName) => {
-      const testRuns = testResults[testName]
-
-      // Filter out framework level flakes.
-      const testLevelFlakes = testRuns.filter((testRun) => {
-        return (
-          !!testRun.error &&
-          COMMON_FRAMEWORK_ERRORS.every(
-            (frameworkError) => !testRun.error.includes(frameworkError)
-          )
-        )
-      })
-      const testAttempts = testLevelFlakes.length
-
-      if (testLevelFlakes.length) {
-        console.log('')
-        console.log(`🗿 ${testName}`)
-        testLevelFlakes.forEach((testRun) => {
-          console.log(testRun.error)
-          if (testRun.logStream) {
-            console.log(`logStream: ${testRun.logStream}`)
-          }
-        })
-      }
-    })
-  }
-
   printHeading('Results')
   console.log(
     '⏰ Total Time:',
@@ -638,9 +545,22 @@ function printRunStatistics({
     console.log(`🟢 ${passedTests.length} successful tests!`)
   }
 
-  const flakeCount = flakedTests.length
-  if (flakeCount > 0) {
-    console.log(`⚠️ ${flakeCount} flaked test${flakeCount === 1 ? '' : 's'}.`)
+  const frameworkFlakeCount = frameworkLevelFlakedTests.length
+  if (frameworkFlakeCount > 0) {
+    console.log(
+      `⚠️🛠️ ${frameworkFlakeCount} framework level flaked test${
+        frameworkFlakeCount === 1 ? '' : 's'
+      }.`
+    )
+  }
+
+  const userFlakeCount = userLevelFlakedTests.length
+  if (userFlakeCount > 0) {
+    console.log(
+      `⚠️🫵 ${userFlakeCount} user level flaked test${
+        userFlakeCount === 1 ? '' : 's'
+      }.`
+    )
   }
 
   const failCount = failedTests.length
@@ -649,10 +569,4 @@ function printRunStatistics({
       failCount === 1 ? '' : 's'
     }`
   )
-
-  return {
-    flakeCount,
-    failCount,
-    passCount: passedTests.length,
-  }
 }
