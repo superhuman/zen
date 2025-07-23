@@ -24,7 +24,7 @@ class ChromeActions {
     } else {
       return this.zen.lambdaInvoke(this.zen.config.lambdaNames.listTests, {
         awsRegion,
-        sessionId: this.zen.config.sessionId,
+        sessionId
       })
     }
   }

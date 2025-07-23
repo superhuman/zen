@@ -42,8 +42,6 @@ const productionConfig = {
 // zen-dependencies-staging
 // chromium-staging
 
-
-
 // Configure Commander.js
 const program = new Command()
 
