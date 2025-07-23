@@ -10,46 +10,13 @@ import Util from './util.js'
 import { chunk } from 'lodash'
 
 import type { Measure } from './profiler'
-
-type TestResult = {
-  name: string
-  result: 'pass' | 'fail'
-  duration: number
-  error?: string
-  logStream?: string
-  requestId?: string
-}
-type TestResults = Record<string, TestResult[]>
-type LambdaTestResult = {
-  fullName: string
-  time: number
-  error?: string
-  stack?: string
-  logStream?: string
-  requestId?: string
-}
-type LambdaTestResults = Record<string, LambdaTestResult>
-type TestResultStatistics = {
-  failCount: number
-  passCount: number
-  userLevelFlakedTests: string[]
-  frameworkLevelFlakedTests: string[]
-  failedTests: string[]
-  passedTests: string[]
-}
-
-export type CLIOptions = {
-  logging: boolean
-  maxAttempts: number
-  debug: boolean
-  configFile: string
-  reuseBuild?: boolean
-  filter?: string
-  headed?: boolean
-  limit?: number
-  verbose?: boolean
-  deflake?: boolean
-}
+import type {
+  TestResult,
+  TestResults,
+  LambdaTestResults,
+  TestResultStatistics,
+  CLIOptions,
+} from './types'
 
 yargs(process.argv.slice(2))
   .usage('$0 <cmd> [configFile]')
@@ -127,165 +94,6 @@ const COMMON_FRAMEWORK_ERRORS = [
   'while waiting for the WS endpoint URL to appear in stdout!',
 ]
 
-function groupTests({
-  zen,
-  tests,
-  deflake,
-  maxAttempts,
-  concurrency,
-}: {
-  zen: Zen
-  tests: string[]
-  deflake: boolean
-  maxAttempts: number
-  concurrency: number
-}): { tests: string[]; time: number }[] {
-  if (deflake) {
-    const groups = []
-    for (let i = 0; i < maxAttempts; i++) {
-      tests.forEach((test) => {
-        groups.push({ tests: [test], time: 0 })
-      })
-    }
-    return groups
-  } else {
-    return chunk(tests, 1).map((testChunk) => {
-      return { tests: testChunk, time: 0 }
-    })
-  }
-}
-
-// TODO: just put this inside chrome actions
-async function runTestGroupOnLambda(chromeActions, group) {
-  try {
-    const result = await chromeActions.workTests({
-      testNames: group.tests,
-    })
-    return result
-  } catch (e) {
-    console.error(e)
-    return group.tests.map((name: string) => {
-      return {
-        fullName: name,
-        error: `zen failed to run this group: ${e.stack || e.message}`,
-        frameworkError: true,
-        time: 0,
-      }
-    })
-  }
-}
-
-async function runTestsHeaded(zen: Zen, opts: CLIOptions, tests: string[]) {
-  const chromeActions = new ChromeActions({ headed: opts.headed, zen })
-  const testResults: Record<string, TestResult[]> = {}
-
-  const lambdaTestResults: LambdaTestResult[] = await runTestGroupOnLambda(
-    chromeActions,
-    { tests, time: 0 }
-  )
-
-  for (const lambdaResult of lambdaTestResults) {
-    const testName = lambdaResult.fullName
-    if (!testResults[testName]) {
-      testResults[testName] = []
-    }
-
-    testResults[testName].push({
-      name: lambdaResult.fullName,
-      result: lambdaResult.error ? 'fail' : 'pass',
-      duration: lambdaResult.time,
-      error: lambdaResult.error,
-      logStream: lambdaResult.logStream,
-      requestId: lambdaResult.requestId,
-    })
-  }
-
-  return testResults
-}
-
-async function runTestsHeadless(
-  zen: Zen,
-  opts: CLIOptions,
-  tests: string[]
-): Promise<Record<string, TestResult[]>> {
-  const chromeActions = new ChromeActions({ headed: opts.headed, zen })
-  const testResults: Record<string, TestResult[]> = {}
-  const concurrency = opts.headed ? 1 : zen.config.lambdaConcurrency
-  const { default: PQueue } = await import('p-queue')
-  const queue = new PQueue({ concurrency })
-  const groups = groupTests({
-    zen,
-    tests,
-    deflake: opts.deflake,
-    maxAttempts: opts.maxAttempts,
-    concurrency,
-  })
-
-  function runTestGroup(group: { tests: string[] }) {
-    queue.add(async () => {
-      let lambdaTestResults: LambdaTestResult[] = await runTestGroupOnLambda(
-        chromeActions,
-        group
-      )
-
-      const testRetries: string[] = []
-
-      for (const lambdaResult of lambdaTestResults) {
-        const testName = lambdaResult.fullName
-        if (!testResults[testName]) {
-          testResults[testName] = []
-        }
-
-        testResults[testName].push({
-          name: lambdaResult.fullName,
-          result: lambdaResult.error ? 'fail' : 'pass',
-          duration: lambdaResult.time,
-          error: lambdaResult.error,
-          logStream: lambdaResult.logStream,
-          requestId: lambdaResult.requestId,
-        })
-        const testAttempts = testResults[testName].length
-
-        if (
-          !opts.deflake &&
-          lambdaResult.error &&
-          testAttempts < opts.maxAttempts
-        ) {
-          testRetries.push(testName)
-        }
-      }
-
-      // If the group size hasn't changed. Implying no tests completed
-      // we break up the tests into seperate runs in case one test is blocking
-      // the others.
-      if (testRetries.length === group.tests.length) {
-        testRetries.forEach((testName) => {
-          runTestGroup({ tests: [testName] })
-        })
-      } else if (testRetries.length) {
-        runTestGroup({ tests: testRetries })
-      }
-    })
-  }
-
-  return new Promise((resolve) => {
-    for (const group of groups) {
-      runTestGroup(group)
-    }
-
-    const intervalId = setInterval(() => {
-      if (queue.pending || queue.size) {
-        console.log(`${queue.pending} In Flight - ${queue.size} in Queue`)
-      }
-    }, 1_000)
-
-    queue.on('idle', () => {
-      clearInterval(intervalId)
-      resolve(testResults)
-    })
-  })
-}
-
 async function run(zen: Zen, opts: CLIOptions) {
   const testRunMeasure = zen.profiler.start('log.zen_test_run')
   const chromeActions = new ChromeActions({ headed: opts.headed, zen })
@@ -338,11 +146,11 @@ async function run(zen: Zen, opts: CLIOptions) {
     )
 
     let testResults: Record<string, TestResult[]> = {}
-    if (opts.headed) {
-      testResults = await runTestsHeaded(zen, opts, workingSet)
-    } else {
-      testResults = await runTestsHeadless(zen, opts, workingSet)
-    }
+    testResults = await Util.runTestsOnRemote({
+      zen,
+      opts,
+      tests: workingSet,
+    })
 
     testRunMeasure.mark('Run Tests')
 

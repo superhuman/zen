@@ -33,18 +33,30 @@ class ChromeActions {
     const sessionId = this.zen.config.sessionId
     const awsRegion = this.zen.config.aws.region
 
-    if (this.headed) {
-      return workTests({
-        awsRegion,
-        testNames,
-        sessionId,
-        headed: this.headed,
-      })
-    } else {
-      return this.zen.lambdaInvoke(this.zen.config.lambdaNames.workTests, {
-        testNames,
-        sessionId,
-        awsRegion,
+    try {
+      if (this.headed) {
+        return workTests({
+          awsRegion,
+          testNames,
+          sessionId,
+          headed: this.headed,
+        })
+      } else {
+        return this.zen.lambdaInvoke(this.zen.config.lambdaNames.workTests, {
+          testNames,
+          sessionId,
+          awsRegion,
+        })
+      }
+    } catch (e) {
+      console.error(e)
+      return testNames.map((name: string) => {
+        return {
+          fullName: name,
+          error: `zen failed to run this group: ${e.stack || e.message}`,
+          frameworkError: true,
+          time: 0,
+        }
       })
     }
   }

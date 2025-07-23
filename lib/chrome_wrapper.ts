@@ -47,6 +47,7 @@ class ChromeTab {
   config: ChromeTabConfig
   requestMap: Record<string, string | undefined>
   browser: Puppeteer.Browser
+  isRemote: boolean
 
   constructor({
     browser,
@@ -57,6 +58,7 @@ class ChromeTab {
     s3,
     headed,
     testPort,
+    isRemote,
   }: {
     browser: Puppeteer.Browser
     page: Puppeteer.Page
@@ -66,6 +68,7 @@ class ChromeTab {
     s3?: S3Client
     headed?: boolean
     testPort?: number
+    isRemote: boolean
   }) {
     this.browser = browser
     this.page = page
@@ -80,25 +83,27 @@ class ChromeTab {
     }
     this.state = 'starting'
     this.timeout = setTimeout(this.onTimeout, 10_000)
+    this.isRemote = isRemote
 
-    /*
-    this.page.on('console', async (message) => {
-      const args = message.args()
-      const logValues = await Promise.all(
-        args.map(async (arg) => {
-          try {
-            return await arg.jsonValue()
-          } catch {
-            return arg.toString()
-          }
-        })
-      )
-      console.log(...logValues)
-    })
-    */
+    if (this.isRemote) {
+      this.page.on('console', async (message) => {
+        console.log(message.text())
 
-    // Expose functions for direct calls from the page
-    this.setupExposedFunctions()
+        // If you want to get more detailed logs you can do:
+        //
+        // We don't do this normally since all the async waiting is slow.
+        //const args = message.args()
+        //const logValues = await Promise.all(
+        //  args.map(async (arg) => {
+        //    try {
+        //      return await arg.jsonValue()
+        //    } catch {
+        //      return arg.toString()
+        //    }
+        //  })
+        //)
+      })
+    }
   }
 
   async setupExposedFunctions() {
@@ -139,6 +144,12 @@ class ChromeTab {
     await this.page.exposeFunction('zenIsHeaded', () => {
       return this.headed
     })
+
+    if (this.isRemote) {
+      await this.page.evaluateOnNewDocument(() => {
+        globalThis.isRunningOnZenRemote = true
+      })
+    }
   }
 
   async resizeWindow({ width, height }: { width: number; height: number }) {
@@ -387,11 +398,15 @@ class ChromeTab {
 }
 
 export default class ChromeWrapper {
-  constructor({ headed = false, awsRegion = process.env.AWS_REGION } = {}) {
+  constructor({
+    headed = false,
+    awsRegion = process.env.AWS_REGION,
+    isRemote = false,
+  } = {}) {
     this.headed = headed
     this.awsRegion = awsRegion
     this.tab = null
-    this.tabTestCount = 0
+    this.isRemote = isRemote
   }
 
   browser?: Promise<Puppeteer.Browser>
@@ -400,6 +415,7 @@ export default class ChromeWrapper {
   assetServer?: http.Server
   assetServerPort?: number
   currentManifest?: FileManifest
+  isRemote: boolean
 
   async launchLocal({
     port,
@@ -417,6 +433,9 @@ export default class ChromeWrapper {
     const localChromeFlags = [
       '--headless',
       '--disable-gpu',
+      '--disable-web-security',
+      '--ignore-certificate-errors',
+      '--allow-running-insecure-content',
       `--window-size=${
         DEFAULT_BROWSER_WIDTH + devtoolsWidth
       },${DEFAULT_BROWSER_HEIGHT}`,
@@ -612,7 +631,6 @@ export default class ChromeWrapper {
   }): Promise<ChromeTab> {
     const { url, id, config, manifest } = tabConfig
     this.tabConfig = tabConfig
-    this.tabTestCount = 0
 
     // TODO: kill on fail
     if (!this.browser) throw new Error('Browser not setup')
@@ -638,7 +656,11 @@ export default class ChromeWrapper {
       manifest,
       s3: this.s3,
       headed: this.headed,
+      isRemote: this.isRemote,
     })
+
+    await tab.setupExposedFunctions()
+
     this.tab = tab
 
     let navigateUrl = url

@@ -25,6 +25,7 @@ export type ZenConfig = {
   useSnapshot: boolean
   tmpDir: string
   alsoServe: { addToIndex: boolean; filePath: string }[]
+  proxyUrl?: string
 
   // TODO flesh this out
   aws: any
@@ -112,7 +113,7 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
           t.replace(config.appRoot, '/base')
         )
       )
-      deps.push(entries.map((e: string) => `//localhost:3100/webpack/${e}`))
+      deps.push(entries.map((e: string) => `webpack/${e}`))
     }
 
     let scripts = deps

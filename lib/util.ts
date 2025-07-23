@@ -6,8 +6,47 @@ const svelte = require('svelte')
 import fetch from 'node-fetch'
 import WebSocket from 'ws'
 import { camelCase, upperFirst } from 'lodash'
+import ChromeActions from './chrome_actions'
+import { chunk } from 'lodash'
+
+import type { TestResult, CLIOptions, LambdaTestResult } from './types'
+import type { Zen } from './index'
 
 let iconCache: string | null = null
+
+function groupTests({
+  zen,
+  tests,
+  deflake,
+  maxAttempts,
+  concurrency,
+  headed,
+}: {
+  zen: Zen
+  tests: string[]
+  deflake: boolean
+  maxAttempts: number
+  concurrency: number
+  headed: boolean
+}): { tests: string[]; time: number }[] {
+  if (headed) {
+    // Run all tests in same group to prevent browser closing and
+    // opening in headed mode.
+    return [{ tests, time: 0 }]
+  } else if (deflake) {
+    const groups = []
+    for (let i = 0; i < maxAttempts; i++) {
+      tests.forEach((test) => {
+        groups.push({ tests: [test], time: 0 })
+      })
+    }
+    return groups
+  } else {
+    return chunk(tests, 1).map((testChunk) => {
+      return { tests: testChunk, time: 0 }
+    })
+  }
+}
 
 class Util {
   static serveWith404(dir: string) {
@@ -122,6 +161,114 @@ class Util {
 
   static last(arr: any[]): any {
     return arr[arr.length - 1]
+  }
+
+  static async runTestsOnRemote({
+    zen,
+    opts,
+    tests,
+    onResult,
+  }: {
+    zen: Zen
+    opts: {
+      maxAttempts: number
+      deflake?: boolean
+      headed?: boolean
+      isLocal?: boolean
+    }
+    tests: string[]
+    onResult?: (result: LambdaTestResult, finalAttempt: boolean) => void
+  }): Promise<Record<string, TestResult[]>> {
+    const chromeActions = new ChromeActions({ headed: opts.headed, zen })
+    const testResults: Record<string, TestResult[]> = {}
+    const concurrency = opts.headed ? 1 : zen.config.lambdaConcurrency
+    const { default: PQueue } = await import('p-queue')
+    const queue = new PQueue({ concurrency })
+    const groups = groupTests({
+      zen,
+      tests,
+      deflake: opts.deflake,
+      maxAttempts: opts.maxAttempts,
+      concurrency,
+      headed: opts.headed,
+    })
+
+    function runTestGroup(group: { tests: string[] }) {
+      queue.add(async () => {
+        let lambdaTestResults: LambdaTestResult[] =
+          await chromeActions.workTests({ testNames: group.tests })
+
+        const testRetries: string[] = []
+
+        for (const lambdaResult of lambdaTestResults) {
+          const testName = lambdaResult.fullName
+          if (!testResults[testName]) {
+            testResults[testName] = []
+          }
+
+          testResults[testName].push({
+            name: lambdaResult.fullName,
+            result: lambdaResult.error ? 'fail' : 'pass',
+            duration: lambdaResult.time,
+            error: lambdaResult.error,
+            logStream: lambdaResult.logStream,
+            requestId: lambdaResult.requestId,
+          })
+          const testAttempts = testResults[testName].length
+
+          let finalAttempt = true
+
+          // On local zen for skip_ci tests they will show up as test not found.
+          // we mark these as ok since we didn't want to run them on ci in the first place.
+          // TODO: filter these upstream so we don't need this hack.
+          if (opts.isLocal && lambdaResult.error === 'test not found') {
+            delete lambdaResult.error
+          }
+
+          if (
+            !opts.headed &&
+            !opts.deflake &&
+            lambdaResult.error &&
+            testAttempts < opts.maxAttempts
+          ) {
+            finalAttempt = false
+            testRetries.push(testName)
+          }
+
+          if (onResult) {
+            onResult(lambdaResult, finalAttempt)
+          }
+        }
+
+        // If the group size hasn't changed. Implying no tests completed
+        // we break up the tests into seperate runs in case one test is blocking
+        // the others.
+        if (testRetries.length === group.tests.length) {
+          testRetries.forEach((testName) => {
+            runTestGroup({ tests: [testName] })
+          })
+        } else if (testRetries.length) {
+          runTestGroup({ tests: testRetries })
+        }
+      })
+    }
+
+    return new Promise((resolve) => {
+      for (const group of groups) {
+        runTestGroup(group)
+      }
+
+      const intervalId = setInterval(() => {
+        if (queue.pending || queue.size) {
+          console.log(`${queue.pending} In Flight - ${queue.size} in Queue`)
+        }
+      }, 1_000)
+
+      queue.on('idle', () => {
+        clearInterval(intervalId)
+        resolve(testResults)
+      })
+    })
   }
 }
 
