@@ -102,7 +102,7 @@ declare global {
   let helpers: helpers | undefined = undefined
   let currentContext: null | TestContext = null // The context of the currently running test.
   let currentTimeout: number
-  let timeout = 10000
+  let timeout = 30000
 
   let whenCurrentTestFinished: Promise<void> | null = null // promise that's resolved when the currently running test finishes
   let currentTestResolve: null | (() => void) = null
@@ -263,7 +263,7 @@ declare global {
       tests: [],
       depth: previous.depth + 1,
       testCount: 0,
-      fullName: [previous.fullName, name].filter((s) => !!s).join(' '),
+      fullName: [previous.fullName, name].filter((s) => !!s).join(' > '),
       before: [],
       beforeEach: [],
       after: [],
@@ -331,7 +331,7 @@ declare global {
 
   function it(name: string, fn?: TestFn) {
     if (!fn) return
-    const fullName = current.fullName + ' ' + name
+    const fullName = [current.fullName, name].filter((v) => !!v).join(' > ')
     current.tests.push({
       fn,
       name,
@@ -366,9 +366,14 @@ declare global {
     current[type].push(handle)
 
     if (current === window.Latte.root && willHotReload && !onDispose) {
+      /*
+        BZ:
+        I recognize this is likely meaningful in some way but it is spamming our logs as of now.
+        The fact we are not doing it doesn't seem to be very meaningful.
       console.warn(
         'Top-level before/after callbacks must pass "module.hot.dispose" as the second argument'
       )
+      */
     }
 
     // onDispose allows hot reloading frameworks to tell us when a callback is being removed
@@ -434,6 +439,7 @@ declare global {
         currentTimeout = realSetTimeout(() => {
           if (hasFinished) return
           console.error('Timeout', cbOrTest.stack)
+
           if (mode == 'headless') {
             rej(
               `Timeout, the test took more than ${ms / 1000}s on remote: ${
@@ -448,7 +454,7 @@ declare global {
 
     context.zen = helpers || {}
     context.zen.extendRemoteTimeout = (ms: number) => {
-      clearTimeout(currentTimeout)
+      realClearTimeout(currentTimeout)
       setTimeoutPromise(ms)
     }
 

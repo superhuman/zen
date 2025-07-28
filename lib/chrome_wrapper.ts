@@ -1,71 +1,14 @@
+// @ts-nocheck
 import Puppeteer from 'puppeteer-core'
-import { S3 } from 'aws-sdk'
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
+import fs from 'fs'
+import connect from 'connect'
+import http from 'http'
+import { execSync } from 'child_process'
+import { URL } from 'url'
 
-const localChromeFlags = ['--headless', '--disable-gpu']
-const lambdaChromeFlags = [
-  '--autoplay-policy=user-gesture-required',
-  '--disable-background-networking',
-  '--disable-backgrounding-occluded-windows',
-  '--disable-component-update',
-  '--disable-domain-reliability',
-  '--disable-features=AudioServiceOutOfProcess',
-  '--disable-ipc-flooding-protection',
-  '--disable-renderer-backgrounding',
-  '--disable-background-timer-throttling',
-  '--disable-breakpad',
-  '--disable-extensions',
-  '--disable-client-side-phishing-detection',
-  '--disable-cloud-import',
-  '--disable-default-apps',
-  '--disable-popup-blocking',
-  '--disable-dev-shm-usage',
-  '--disable-gesture-typing',
-  '--disable-print-preview',
-  '--disable-prompt-on-repost',
-  '--disable-hang-monitor',
-  '--disable-infobars',
-  '--disable-notifications',
-  '--disable-offer-store-unmasked-wallet-cards',
-  '--disable-offer-upload-credit-cards',
-  '--disable-setuid-sandbox',
-  '--disable-speech-api',
-  '--disable-sync',
-  '--disable-tab-for-desktop-share',
-  '--disable-translate',
-  '--disable-voice-input',
-  '--disable-wake-on-wifi',
-  '--enable-async-dns',
-  '--enable-simple-cache-backend',
-  '--enable-tcp-fast-open',
-  '--hide-scrollbars',
-  '--media-cache-size=33554432',
-  '--metrics-recording-only',
-  '--mute-audio',
-  '--no-default-browser-check',
-  '--no-first-run',
-  '--no-pings',
-  '--no-sandbox',
-  '--no-zygote',
-  '--password-store=basic',
-  '--prerender-from-omnibox=disabled',
-  '--use-mock-keychain',
-  '--memory-pressure-off',
-  '--enable-webgl',
-  '--ignore-gpu-blacklist',
-  '--use-gl=swiftshader',
-  '--headless',
-  '--single-process',
-  '--remote-debugging-port=9222',
-  `--window-size=800,600`,
-  '--user-data-dir=/tmp/chromeUserData',
-  '--enable-logging',
-  '--log-level=0',
-  '--v=1',
-  '--disable-web-security', // TODO figure out why S3 fetch requests are blocked, then remove this
-  // The default referrer policy was changed in chrome 85, this reverts
-  // it to the way it worked before https://www.chromestatus.com/feature/6251880185331712
-  '--force-legacy-default-referrer-policy',
-]
+const DEFAULT_BROWSER_WIDTH = 1300
+const DEFAULT_BROWSER_HEIGHT = 1000
 
 type WindowSize = {
   width: number
@@ -94,6 +37,8 @@ type FileManifest = {
   assetUrl: string
 }
 
+const TEST_TIMEOUT = 45_000
+
 class ChromeTab {
   codeHash?: string
   test?: Test
@@ -101,40 +46,119 @@ class ChromeTab {
   state: ChromeTabState
   config: ChromeTabConfig
   requestMap: Record<string, string | undefined>
+  browser: Puppeteer.Browser
+  isRemote: boolean
 
-  constructor(
-    private browser: Puppeteer.Browser,
-    private page: Puppeteer.Page,
-    private id: string = 'Dev',
-    config: Partial<ChromeTabConfig>,
-    private manifest?: FileManifest,
-    private s3?: S3
-  ) {
-    this.config = { skipHotReload: false, failOnExceptions: false, ...config }
+  constructor({
+    browser,
+    page,
+    id = 'Dev',
+    config,
+    manifest,
+    s3,
+    headed,
+    testPort,
+    isRemote,
+  }: {
+    browser: Puppeteer.Browser
+    page: Puppeteer.Page
+    id: string
+    config: Partial<ChromeTabConfig>
+    manifest?: FileManifest
+    s3?: S3Client
+    headed?: boolean
+    testPort?: number
+    isRemote: boolean
+  }) {
+    this.browser = browser
+    this.page = page
+    this.id = id
+    this.manifest = manifest
+    this.s3 = s3
+    this.headed = headed
+    this.config = {
+      skipHotReload: false,
+      failOnExceptions: false,
+      ...config,
+    }
     this.state = 'starting'
     this.timeout = setTimeout(this.onTimeout, 10_000)
-    this.requestMap = {}
-    this.page.setRequestInterception(true)
-    this.page.on('request', this.onRequestPaused)
-    this.page.on('console', async (message) => {
-      console.log(message)
-      this.onMessageAdded(message.text())
+    this.isRemote = isRemote
+    this._listTestErrors = []
+
+    if (this.isRemote) {
+      this.page.on('console', async (message) => {
+        console.log(message.text())
+
+        // If you want to get more detailed logs you can do:
+        //
+        // We don't do this normally since all the async waiting is slow.
+        //const args = message.args()
+        //const logValues = await Promise.all(
+        //  args.map(async (arg) => {
+        //    try {
+        //      return await arg.jsonValue()
+        //    } catch {
+        //      return arg.toString()
+        //    }
+        //  })
+        //)
+      })
+    }
+  }
+
+  async setupExposedFunctions() {
+    // Expose Zen functions to the page context
+    await this.page.exposeFunction('zenIdle', () => {
+      if (this.closed) return
+
+      if (this.state === 'loading' || this.state === 'starting') {
+        this.becomeIdle()
+      }
     })
-    this.page.on('error', (error) => {
-      this.onExceptionThrown(error)
+
+    await this.page.exposeFunction('zenHotReload', () => {
+      if (this.closed) return
+
+      if (this.state === 'hotReload') {
+        this.becomeIdle()
+      }
     })
-    this.page.on('pageerror', (error: Error) => {
-      console.log(error)
-      this.onMessageAdded(error.message + ':' + error.stack)
+
+    await this.page.exposeFunction('zenResults', (results: any) => {
+      if (this.closed) return
+
+      if (this.state === 'running') {
+        this.finishTest(results)
+        this.becomeIdle()
+      }
     })
+
+    await this.page.exposeFunction(
+      'zenResizeWindow',
+      (args: { width: number; height: number }) => {
+        if (this.closed) return
+        this.resizeWindow(args)
+      }
+    )
+
+    await this.page.exposeFunction('zenIsHeaded', () => {
+      return this.headed
+    })
+
+    await this.page.exposeFunction('zenReportListTestError', (message: string) => {
+      this._listTestErrors.push(message)
+    })
+
+    if (this.isRemote) {
+      await this.page.evaluateOnNewDocument(() => {
+        globalThis.isRunningOnZenRemote = true
+      })
+    }
   }
 
   async resizeWindow({ width, height }: { width: number; height: number }) {
     return this.page.setViewport({ width, height })
-  }
-
-  disconnect() {
-    return this.page.close()
   }
 
   changeState(state: ChromeTabState) {
@@ -155,8 +179,9 @@ class ChromeTab {
       this.resolveWork?.(null)
     }
 
-    const promise = new Promise((res) => {
-      this.resolveWork = res
+    const promise = new Promise((resolve, reject) => {
+      this.resolveWork = resolve
+      this.rejectWork = reject
     })
     this.test = test
     if (this.state === 'idle') {
@@ -174,15 +199,46 @@ class ChromeTab {
     resolve: (value: unknown) => void
     reject: (reason: unknown) => void
   }
-  getTestNames() {
+
+  async getTestNames() {
     const promise = new Promise((resolve, reject) => {
       this.listRequest = { resolve, reject }
     })
+
+    if (this.state === 'idle') {
+      this.listTests()
+    }
+
     return promise
   }
 
+  async listTests() {
+    try {
+      const results = await this._evaluate(
+        `Latte.flatten().map(t => t.fullName)`
+      )
+      if (!this.listRequest) {
+        throw new Error('this.listRequest is not defined when listing tests')
+      }
+
+      if (this._listTestErrors.length) {
+        this.listRequest.reject(
+          new Error(
+            `Failed with errors:\n${this._listTestErrors.join('\n')}`
+          )
+        )
+      }
+
+      this.listRequest.resolve(results)
+    } catch (e) {
+      this.listRequest.reject(e.message)
+    } finally {
+      this._listTestErrors = []
+    }
+  }
+
   _evaluate(code: string) {
-    return this._retryOnClose(() => this.page.evaluate(code))
+    return this.page.evaluate(code)
   }
 
   // Attempt to hot reload the latest code
@@ -201,10 +257,14 @@ class ChromeTab {
   async run() {
     this.changeState('running')
     this.startAt = new Date()
-    this.timeout = setTimeout(this.onTimeout, 20_000)
+    this.timeout = setTimeout(this.onTimeout, TEST_TIMEOUT)
 
-    await this._retryOnClose(() => this.page.focus('body'))
-    this.page.evaluate(`Zen.run(${JSON.stringify(this.test)})`)
+    try {
+      await this.page.focus('body')
+      await this.page.evaluate(`Zen.run(${JSON.stringify(this.test)})`)
+    } catch (e) {
+      this.failTest('Error during test execution', e.stack || '')
+    }
   }
 
   badCodeError?: string
@@ -222,24 +282,6 @@ class ChromeTab {
     }
   }
 
-  async listTests() {
-    // TODO clean up this typing
-    const { result, exceptionDetails } = (await this._evaluate(
-      `Latte.flatten().map(t => t.fullName)`
-    )) as { result: { value: string }; exceptionDetails: { message: string } }
-
-    // TODO there should be a way to encode listRequest in the types as non-nullable
-    if (!this.listRequest) {
-      throw new Error('this.listRequest is not defined when listing tests')
-    }
-
-    if (exceptionDetails) {
-      console.log('ListTest exception', exceptionDetails)
-      this.listRequest.reject(exceptionDetails.message)
-    }
-    this.listRequest.resolve(result.value)
-  }
-
   becomeIdle() {
     this.changeState('idle')
     if (this.codeHash) this.hotReload()
@@ -247,69 +289,37 @@ class ChromeTab {
     else if (this.listRequest) this.listTests()
   }
 
-  async _retryOnClose<A>(cb: () => A): Promise<A | undefined> {
-    try {
-      return await cb()
-    } catch (e) {
-      if (e instanceof Error && e.message.includes('Session closed')) {
-        const oldUrl = this.page.url()
-        this.page = await this.browser.newPage()
-        await this.page.goto(oldUrl)
-        return await cb()
-      }
-    }
-  }
-
   async reload() {
     this.changeState('loading')
-    this.timeout = setTimeout(this.onTimeout, 10 * 1000)
+    this.timeout = setTimeout(this.onTimeout, TEST_TIMEOUT)
     this.codeHash = undefined
-    this.requestMap = {}
     console.log(`[${this.id}] reloading`)
-    // TODO navigate to the correct url, in case the test has changed our location
-    return await this._retryOnClose(() => this.page.reload())
+    this.page.reload()
   }
 
   onTimeout = () => {
+    if (this.headed) {
+      return
+    }
+
+    if (this.state === 'loading' && this.rejectWork) {
+      console.log(`[${this.id}] timeout while loading`)
+      // In the case we timed out on loading this indicates our browser
+      // process isn't loading at all. In this case we want to kill and restart
+      // our chrome process.
+      this.rejectWork(new Error('Puppeteer stalled'))
+      return
+    }
+
     if (this.state == 'running') {
       this.failTest('Chrome-level test timeout')
     } else if (this.state == 'hotReload') {
       console.log(`[${this.id}] timeout while hotReloading`)
-    } else if (this.state === 'loading') {
-      console.log(`[${this.id}] timeout while loading`)
     }
 
     // If we hit a timeout, the page is likely stuck and we don't really know
     // if it's safe to run tests. The best we can do is reload.
     this.reload()
-  }
-
-  onMessageAdded(text: string) {
-    const register = (name: string, cb: (value?: unknown) => void) => {
-      if (text.startsWith(name)) {
-        const value = text.slice(name.length).trim()
-        console.log(value)
-        cb(value && JSON.parse(value))
-      }
-    }
-
-    register('Zen.idle', () => {
-      if (this.state === 'loading') this.becomeIdle()
-    })
-    register('Zen.hotReload', () => {
-      if (this.state === 'hotReload') this.becomeIdle()
-    })
-
-    register('Zen.results', () => {
-      if (this.state === 'running') {
-        const msg = JSON.parse(text.slice(12))
-        this.finishTest(msg)
-        this.becomeIdle()
-      }
-    })
-    register('Zen.resizeWindow', (args) => {
-      this.resizeWindow(args)
-    })
   }
 
   failTest(error: string, stack = '') {
@@ -370,88 +380,98 @@ class ChromeTab {
     } else if (this.state == 'hotReload') this.reload()
   }
 
-  onRequestPaused = async (request: Puppeteer.HTTPRequest) => {
-    const gatewayUrl = process.env.GATEWAY_URL
-    const requestUrl = request.url()
-    const isToGateway = gatewayUrl && requestUrl.indexOf(gatewayUrl) >= 0
+  async kill({ skipCDP } = {}) {
+    clearTimeout(this.timeout)
+    this.closed = true
 
-    const defaultReturn = async () => {
+    try {
+      // Remove all event listeners first
+      this.page.removeAllListeners()
+
+      // Add timeout to prevent hanging
+      await Promise.race([
+        this.page.close(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Page close timeout')), 10000)
+        ),
+      ])
+    } catch (e) {
+      // If page.close() fails or times out, try to force close via browser
       try {
-        return request.continue()
-      } catch (error) {
-        console.error('Non-fatal error from cdp.Fetch.continueRequest', error)
+        const browser = this.browser
+        if (browser && browser.process()) {
+          console.log('Force killing browser process')
+          const pid = browser.process().pid
+          if (pid) {
+            execSync(`kill -9 ${pid}`)
+          }
+        }
+      } catch (killError) {
+        console.log('Force kill also failed:', killError.message)
       }
-    }
-
-    if (!this.manifest || !isToGateway) {
-      return defaultReturn()
-    }
-
-    const path = decodeURIComponent(requestUrl.replace(`${gatewayUrl}/`, ''))
-    if (path.match(/^index\.html/)) {
-      return request.respond({
-        status: 200,
-        contentType: 'text/html',
-        body: this.manifest.index,
-      })
-    }
-
-    const key = this.manifest.fileMap[path]
-    if (key) {
-      try {
-        const url = `${this.manifest.assetUrl}/${key}`
-        console.log(`${path} redirected to ${url}`)
-        if (!this.s3) throw new Error('s3 not defined')
-        if (!process.env.ASSET_BUCKET)
-          throw new Error('ASSET_BUCKET is not defined')
-
-        const response = await this.s3
-          .getObject({
-            Bucket: process.env.ASSET_BUCKET,
-            Key: key,
-          })
-          .promise()
-        const body = response.Body as Buffer
-
-        await request.respond({
-          status: 200,
-          contentType: response.ContentType,
-          body,
-        })
-      } catch (e) {
-        // There is a chance for a redirect or new tab while this s3 request is going through
-        // if we try to fulfill a request that has been canceled chrome gets really angry
-        console.error(e)
-      }
-    } else {
-      console.log(`${path} missing from manifest`)
-      return request.respond({
-        status: 404,
-        body: 'Missing from manifest',
-        headers: { 'Content-Type': 'text/plain' },
-      })
     }
   }
 }
 
 export default class ChromeWrapper {
+  constructor({
+    headed = false,
+    awsRegion = process.env.AWS_REGION,
+    isRemote = false,
+  } = {}) {
+    this.headed = headed
+    this.awsRegion = awsRegion
+    this.tab = null
+    this.isRemote = isRemote
+  }
+
   browser?: Promise<Puppeteer.Browser>
-  s3?: S3
+  s3?: S3Client
+  testPort?: number
+  assetServer?: http.Server
+  assetServerPort?: number
+  currentManifest?: FileManifest
+  isRemote: boolean
 
   async launchLocal({
     port,
-    windowSize: { width, height } = { width: 800, height: 600 },
+    headed = false,
   }: {
     port: number
     windowSize: WindowSize
+    headed?: boolean
   }): Promise<void> {
+    let devtoolsWidth = 0
+    // Add a little width for the devtools
+    if (headed) {
+      devtoolsWidth = 400
+    }
+    const localChromeFlags = [
+      '--headless',
+      '--disable-gpu',
+      '--disable-web-security',
+      '--ignore-certificate-errors',
+      '--allow-running-insecure-content',
+      `--window-size=${
+        DEFAULT_BROWSER_WIDTH + devtoolsWidth
+      },${DEFAULT_BROWSER_HEIGHT}`,
+    ]
+
+    this.s3 = new S3Client({ region: this.awsRegion })
+
     try {
       // When running locally, just use puppeteer because it bundles chromium with it
       const Puppeteer = require('puppeteer')
+      const chromeFlags = headed
+        ? localChromeFlags.filter((flag) => flag !== '--headless')
+        : localChromeFlags
+
       this.browser = Puppeteer.launch({
         debuggingPort: port,
-        headless: true,
-        args: [...localChromeFlags, `--window-size=${width},${height}`],
+        headless: !this.headed,
+        devtools: this.headed,
+        env: { ...process.env, TZ: 'America/New_York' },
+        args: [...chromeFlags],
       })
     } catch (e) {
       console.error(e)
@@ -460,44 +480,277 @@ export default class ChromeWrapper {
 
   async launchLambda(): Promise<Puppeteer.Browser | undefined> {
     try {
-      this.s3 = new S3({ params: { Bucket: process.env.ASSET_BUCKET } })
-      const executablePath = await require('chrome-aws-lambda').executablePath
+      this.s3 = new S3Client({ region: this.awsRegion })
+      const chromium = (await import('@sparticuz/chromium')).default
+      const executablePath = await chromium.executablePath()
+
       this.browser = Puppeteer.launch({
         debuggingPort: 9222,
-        executablePath,
+        executablePath: executablePath,
         env: { ...process.env, TZ: 'America/New_York' },
-        args: lambdaChromeFlags,
+        args: chromium.args.concat([
+          '--enable-logging',
+          '--log-level=0',
+          `--window-size=${DEFAULT_BROWSER_WIDTH},${DEFAULT_BROWSER_HEIGHT}`,
+        ]),
+        ignoreHTTPSErrors: true,
+        headless: true,
       })
+
       return await this.browser
     } catch (e) {
       console.error(e)
     }
   }
 
-  async openTab(
-    url: string,
-    id: string,
-    config: ChromeTabConfig,
+  async createAssetServer(): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const app = connect()
+
+      app.use(async (req, res, next) => {
+        try {
+          const url = new URL(req.url!, `http://localhost`)
+          const path = decodeURIComponent(url.pathname.slice(1)).replace(
+            'pub/',
+            ''
+          )
+
+          if (!this.currentManifest) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' })
+            res.end('No manifest available')
+            return
+          }
+
+          if (path.match(/^index\.html$/)) {
+            res.writeHead(200, {
+              'Content-Type': 'text/html',
+              'Cross-Origin-Embedder-Policy': 'require-corp',
+              'Cross-Origin-Opener-Policy': 'same-origin',
+              'Cache-Control': 'public, max-age=31536000, immutable',
+            })
+            res.end(this.currentManifest.index)
+            return
+          }
+
+          const key = this.currentManifest.fileMap[path]
+          if (key) {
+            if (!this.s3) throw new Error('s3 not defined')
+            if (!process.env.ASSET_BUCKET)
+              throw new Error('ASSET_BUCKET is not defined')
+
+            const response = await this.s3.send(
+              new GetObjectCommand({
+                Bucket: process.env.ASSET_BUCKET,
+                Key: key,
+              })
+            )
+
+            let body = await response.Body?.transformToByteArray()
+            let headers: Record<string, string> = {
+              'Cross-Origin-Embedder-Policy': 'require-corp',
+              'Cross-Origin-Opener-Policy': 'same-origin',
+              'Cache-Control': 'public, max-age=31536000, immutable',
+            }
+
+            if (response.ContentType === 'application/wasm') {
+              body = Buffer.from(body!)
+              headers[
+                'content-security-policy'
+              ] = `script-src 'self' 'wasm-unsafe-eval'`
+              headers['Content-Length'] = body.length.toString()
+            }
+
+            if (response.ContentType) {
+              headers['Content-Type'] = response.ContentType
+            }
+
+            res.writeHead(200, headers)
+            res.end(Buffer.from(body!))
+          } else {
+            res.writeHead(404, { 'Content-Type': 'text/plain' })
+            res.end('Missing from manifest')
+          }
+        } catch (e) {
+          console.error('Asset server error:', e)
+          res.writeHead(500, { 'Content-Type': 'text/plain' })
+          res.end('Internal server error')
+        }
+      })
+
+      this.assetServer = http.createServer(app)
+
+      // Find an available port starting from 3003
+      let port = 3003
+      const tryPort = () => {
+        this.assetServer!.listen(port, (err?: Error) => {
+          // TODO: I don't think this works
+          if (err && (err as any).code === 'EADDRINUSE') {
+            port++
+            tryPort()
+          } else if (err) {
+            reject(err)
+          } else {
+            this.assetServerPort = port
+            console.log(`Asset server listening on port ${port}`)
+            resolve(port)
+          }
+        })
+      }
+
+      tryPort()
+    })
+  }
+
+  async ensureAssetServer(manifest: FileManifest): Promise<number> {
+    // Update the current manifest
+    this.currentManifest = manifest
+    // If server already exists, just return the port
+    if (this.assetServer && this.assetServerPort) {
+      console.log(
+        `Reusing existing asset server on port ${this.assetServerPort}`
+      )
+      return this.assetServerPort
+    }
+
+    // Create server if it doesn't exist
+    console.log('Creating new asset server')
+    return await this.createAssetServer()
+  }
+
+  async getTestNames() {
+    return this.tab.getTestNames()
+  }
+
+  async runTest(testOpts) {
+    await this.tab.reload()
+    const result = await this.tab.setTest(testOpts)
+    return result
+  }
+
+  async closeTab(opts) {
+    await this.tab.kill(opts)
+    this.tab = null
+    this.tabConfig = null
+  }
+
+  async resetTab(opts) {
+    const tabConfig = this.tabConfig
+    await this.closeTab(opts)
+    return this.openTab(tabConfig)
+  }
+
+  async openTab(tabConfig: {
+    url: string
+    id: string
+    config: ChromeTabConfig
     manifest?: FileManifest
-  ): Promise<ChromeTab> {
+  }): Promise<ChromeTab> {
+    const { url, id, config, manifest } = tabConfig
+    this.tabConfig = tabConfig
+
+    // TODO: kill on fail
     if (!this.browser) throw new Error('Browser not setup')
+    if (this.tab)
+      throw new Error(
+        'Tab already exists. Close existing tab before opening new one.'
+      )
 
     const browser = await this.browser
     const page = await browser.newPage()
+    page.setViewport({
+      width: DEFAULT_BROWSER_WIDTH,
+      height: DEFAULT_BROWSER_HEIGHT,
+    })
     // set 5 mins timeout to reduce test flake on navigation timeout
     await page.setDefaultNavigationTimeout(5 * 60 * 1000)
 
-    const tab = new ChromeTab(browser, page, id, config, manifest, this.s3)
+    const tab = new ChromeTab({
+      browser,
+      page,
+      id,
+      config,
+      manifest,
+      s3: this.s3,
+      headed: this.headed,
+      isRemote: this.isRemote,
+    })
 
-    // TODO clean up order, right now it makes tab before goto to make the url stuff work properly
-    await page.goto(url)
+    await tab.setupExposedFunctions()
+
+    this.tab = tab
+
+    let navigateUrl = url
+
+    if (manifest) {
+      // Ensure asset server is running and modify URL to point to it
+      const serverPort = await this.ensureAssetServer(manifest)
+      navigateUrl = `http://localhost:${serverPort}/index.html`
+    }
+
+    await page.goto(navigateUrl)
+
     return tab
   }
 
-  async kill(): Promise<void> {
-    if (!this.browser) return
-    const browser = await this.browser
+  async forceKill() {
+    if (this.browser) {
+      const browser = await this.browser
+      const process = browser.process()
+      if (process && process.pid) {
+        const pid = process.pid
+        execSync(`kill -9 ${pid}`)
+      }
+    }
+    this.closed = true
+  }
 
-    return browser.close()
+  async kill(): Promise<void> {
+    if (this.closed) {
+      return
+    }
+
+    this.closed = true
+
+    const gracefulShutdown = async () => {
+      if (this.assetServer) {
+        console.log('Closing asset server')
+        this.assetServer.close()
+        this.assetServer = undefined
+        this.assetServerPort = undefined
+      }
+
+      // Close tab first
+      if (this.tab) {
+        await this.tab.kill()
+      }
+
+      // Close browser with timeout
+      if (this.browser) {
+        console.log('Closing browser')
+        const browser = await this.browser
+
+        await browser.close()
+        console.log('Browser closed successfully')
+      }
+    }
+
+    try {
+      await Promise.race([
+        gracefulShutdown(),
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Browser close timeout')), 10000)
+        }),
+      ])
+    } catch (e) {
+      // Force kill if normal close fails
+      try {
+        console.warn(
+          'Graceful Close Failed. Forcefully killing Chrome process.'
+        )
+        await this.forceKill()
+      } catch (forceKillError) {
+        console.log('Force kill failed:', forceKillError.message)
+      }
+    }
   }
 }

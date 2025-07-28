@@ -32,13 +32,13 @@ type webpackStats = Stats & {
 
 type state = CompilingState | FailedState | webpackStats
 
-module.exports = class WebpackAdapter extends EventEmitter {
+class WebpackAdapter extends EventEmitter {
   compiler: Compiler
   compile?: state
   status?: state['status']
   private zenConfig?: ZenConfig
 
-  constructor(zenConfig: Configuration) {
+  constructor(zenConfig: ZenConfig) {
     super()
 
     this.zenConfig = zenConfig
@@ -99,6 +99,7 @@ module.exports = class WebpackAdapter extends EventEmitter {
   startDevServer(server: Server) {
     const zenConfig = this.zenConfig
     if (zenConfig?.setDevelopmentHeaders) {
+      // @ts-expect-error
       WebpackDevServer.prototype.setContentHeaders = function (req, res, next) {
         if (this.headers) {
           for (var name in this.headers) {
@@ -151,3 +152,5 @@ module.exports = class WebpackAdapter extends EventEmitter {
     this.emit('status', this.status, state)
   }
 }
+
+export default WebpackAdapter

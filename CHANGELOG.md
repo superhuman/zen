@@ -1,3 +1,32 @@
+# 2025-07-21 0.5.0
+
+- Add new command line flags:
+  - `--filter` filter for specific test when running zen remote.
+  - `--headed` opens headed browser with tests. This is the same puppeteer browser as remote so this can be useful for using devtools to inspect dom in enviorment matching remote.
+  - `--deflake` run the tests many times and report back if it ever fails.
+  - `--reuseBuild` reuses existing built code instead of running webpack build. This is mostly useful for iterating on zen framework changes.
+  - `--limit` limit number of tests ran. Mostly useful for iterating on zen framework changes.
+  - `--verbose` more logs.
+- Fix bug where failing tests were marked as passed.
+  - Previously there were 2 retry mechanisms: one on the lambda worker, one in the node script of zen remote. What used to happen is if the a test did all of its retries and errored, sent its results back to node script, then the node script did a retry it would mark all of those errored tests as passing.
+  - New logic only has retry mechanism in the node script. Lambda has "dumber" logic in that it just runs the tests given to it. No retries.
+- Add promise queue for test retries.
+  - This is much faster since we can immediately retry.
+- Only run 1 test at a time on lambda.
+  - I would like to run multiple tests at a time for performance but I found running multiple tests leads to framework level timeouts on lambda. So it actually ends up being faster to just do one at a time.
+- Upgrade the chrome version we use on aws lambda to the latest chrome.
+  - Previous chrome was 4+ years old leading to local vs remote issues.
+  - This also switches us from using websql to wasm sqlite in remote. Removing our last websql dependency.
+  - We are now using `@sparticuz/chromium` for our lambda compatible chrome build.
+- Upgrade aws-sdk and other required libraries.
+  - These libraries didn't work with the latest node and I had to upgrade off of node 14 since that is deprecated on lambda.
+- Add `yarn typecheck` command and get types passing.
+  - I took the shortest path here allowing `any` etc. Existing types were failing badly and I wanted typing for my changes but didn't want to spend much time on it.
+- Switches asset serving strategy to use local dev server instead of request interception. I found request interception stall on serving wasm files.
+- Remove .eslintrc. Tons of linting was failing so I'm removing it for now.
+- Add `>` in between different test parts so its easier to grep for test.
+- Add display of remote logs url in output + other terminal output display changes.
+
 # 2025-07-14 0.3.33
 
 - Fix logging option

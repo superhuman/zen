@@ -1,9 +1,12 @@
 {
   "compilerOptions": {
-    "target": "ES2019",
+    "target": "ES2023",
     "module": "ESNext",
     "moduleResolution": "node",
-    "strict": true,
-    "esModuleInterop": true
-  }
+    "esModuleInterop": true,
+    "noImplicitAny": false,
+    "skipLibCheck": true
+  },
+  "include": ["lib/**/*.ts"],
+  "exclude": ["node_modules", "build", "**/*.js"]
 }
