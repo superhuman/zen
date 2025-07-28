@@ -111,7 +111,9 @@ async function run(zen: Zen, opts: CLIOptions) {
           }
         }
       )
+
       await zen.webpack.build()
+
       testRunMeasure.mark(`Webpack Build Time`)
 
       console.log('Syncing to S3')
@@ -210,11 +212,6 @@ async function run(zen: Zen, opts: CLIOptions) {
 
     process.exit(resultStatistics.failCount ? 1 : 0)
   } catch (e) {
-    if (opts.headed) {
-      const forever = new Promise(() => {})
-      await forever
-    }
-
     console.error(e)
     process.exit(1)
   }
@@ -303,11 +300,22 @@ function printRunStatistics({
   } = resultStatistics
   const performanceMetric = testRunMeasure.getMetric()
 
+  if (process.env.VERBOSE === 'true' && passedTests.length) {
+    printHeading('Passed Tests')
+    for (const testName of passedTests) {
+      const testRuns = testResults[testName]
+      console.log(`🟢 ${testName}`)
+      testRuns.filter((t) => !t.error).forEach((test) => {
+        console.log(`logStream: ${test.logStream}`)
+      })
+    }
+  }
+
   if (process.env.VERBOSE === 'true' && frameworkLevelFlakedTests.length) {
     printHeading('Framework Level Flaked Tests')
     for (const testName of frameworkLevelFlakedTests) {
       const testRuns = testResults[testName]
-      const testAttempts = testRuns.length
+      const testAttempts = testRuns.filter((t) => !!t.error).length
       console.log(`⚠️ ${testName} (flaked ${testAttempts - 1}x)`)
       testRuns.forEach((test) => {
         if (
@@ -331,7 +339,7 @@ function printRunStatistics({
     printHeading('Flaked Tests')
     for (const testName of userLevelFlakedTests) {
       const testRuns = testResults[testName]
-      const testAttempts = testRuns.length
+      const testAttempts = testRuns.filter((t) => !!t.error).length
       console.log(`⚠️ ${testName} (flaked ${testAttempts - 1}x)`)
       testRuns.forEach((test) => {
         if (
@@ -384,7 +392,7 @@ function printRunStatistics({
   }
 
   const frameworkFlakeCount = frameworkLevelFlakedTests.length
-  if (frameworkFlakeCount > 0) {
+  if (process.env.VERBOSE === 'true' && frameworkFlakeCount > 0) {
     console.log(
       `⚠️🛠️ ${frameworkFlakeCount} framework level flaked test${
         frameworkFlakeCount === 1 ? '' : 's'
