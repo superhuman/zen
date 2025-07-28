@@ -90,7 +90,6 @@ yargs(process.argv.slice(2))
 const COMMON_FRAMEWORK_ERRORS = [
   'Puppeteer stalled',
   'Lambda Timeout Exceeded',
-  'Chrome-level test timeout',
   'while waiting for the WS endpoint URL to appear in stdout!',
 ]
 
@@ -316,7 +315,7 @@ function printRunStatistics({
     for (const testName of frameworkLevelFlakedTests) {
       const testRuns = testResults[testName]
       const testAttempts = testRuns.filter((t) => !!t.error).length
-      console.log(`⚠️ ${testName} (flaked ${testAttempts - 1}x)`)
+      console.log(`⚠️ ${testName} (flaked ${testAttempts}x)`)
       testRuns.forEach((test) => {
         if (
           test.error &&
@@ -340,7 +339,7 @@ function printRunStatistics({
     for (const testName of userLevelFlakedTests) {
       const testRuns = testResults[testName]
       const testAttempts = testRuns.filter((t) => !!t.error).length
-      console.log(`⚠️ ${testName} (flaked ${testAttempts - 1}x)`)
+      console.log(`⚠️ ${testName} (flaked ${testAttempts}x)`)
       testRuns.forEach((test) => {
         if (
           test.error &&
