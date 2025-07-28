@@ -243,12 +243,10 @@ class Util {
         // If the group size hasn't changed. Implying no tests completed
         // we break up the tests into seperate runs in case one test is blocking
         // the others.
-        if (testRetries.length === group.tests.length) {
+        if (testRetries.length) {
           testRetries.forEach((testName) => {
             runTestGroup({ tests: [testName] })
           })
-        } else if (testRetries.length) {
-          runTestGroup({ tests: testRetries })
         }
       })
     }

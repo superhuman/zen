@@ -34,22 +34,23 @@ class ChromeActions {
     const awsRegion = this.zen.config.aws.region
 
     try {
+      let results
       if (this.headed) {
-        return workTests({
+        results = await workTests({
           awsRegion,
           testNames,
           sessionId,
           headed: this.headed,
         })
       } else {
-        return this.zen.lambdaInvoke(this.zen.config.lambdaNames.workTests, {
+        results = await this.zen.lambdaInvoke(this.zen.config.lambdaNames.workTests, {
           testNames,
           sessionId,
           awsRegion,
         })
       }
+      return results
     } catch (e) {
-      console.error(e)
       return testNames.map((name: string) => {
         return {
           fullName: name,

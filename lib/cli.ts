@@ -128,6 +128,10 @@ async function run(zen: Zen, opts: CLIOptions) {
 
     let workingSet: string[] = await chromeActions.listTests()
 
+    if (process.env.VERBOSE === 'true') {
+      console.log(`Found ${workingSet.length} tests`)
+    }
+
     if (opts.filter) {
       const filter = opts.filter.trim()
       console.log(`Filtering tests by "${filter}"`)

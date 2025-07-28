@@ -84,6 +84,7 @@ class ChromeTab {
     this.state = 'starting'
     this.timeout = setTimeout(this.onTimeout, 10_000)
     this.isRemote = isRemote
+    this._listTestErrors = []
 
     if (this.isRemote) {
       this.page.on('console', async (message) => {
@@ -143,6 +144,10 @@ class ChromeTab {
 
     await this.page.exposeFunction('zenIsHeaded', () => {
       return this.headed
+    })
+
+    await this.page.exposeFunction('zenReportListTestError', (message: string) => {
+      this._listTestErrors.push(message)
     })
 
     if (this.isRemote) {
@@ -215,9 +220,20 @@ class ChromeTab {
       if (!this.listRequest) {
         throw new Error('this.listRequest is not defined when listing tests')
       }
+
+      if (this._listTestErrors.length) {
+        this.listRequest.reject(
+          new Error(
+            `Failed with errors:\n${this._listTestErrors.join('\n')}`
+          )
+        )
+      }
+
       this.listRequest.resolve(results)
     } catch (e) {
       this.listRequest.reject(e.message)
+    } finally {
+      this._listTestErrors = []
     }
   }
 
