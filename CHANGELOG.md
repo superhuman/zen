@@ -1,3 +1,7 @@
+# 2025-07-28 0.5.4
+
+- Add reload for local dev worker
+
 # 2025-07-28 0.5.3
 
 - Update queue reporting interval in ci
