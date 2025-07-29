@@ -140,6 +140,10 @@ export default async function initZen(configFilePath: string): Promise<Zen> {
 
   const lambdaClient = new LambdaClient({
     region: config.aws.region,
+    credentials: {
+      accessKeyId: config.aws.accessKeyId,
+      secretAccessKey: config.aws.secretAccessKey,
+    },
     requestHandler: new NodeHttpHandler({
       httpsAgent: new Agent({
         maxSockets: 2000,

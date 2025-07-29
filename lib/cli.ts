@@ -308,9 +308,11 @@ function printRunStatistics({
     for (const testName of passedTests) {
       const testRuns = testResults[testName]
       console.log(`🟢 ${testName}`)
-      testRuns.filter((t) => !t.error).forEach((test) => {
-        console.log(`logStream: ${test.logStream}`)
-      })
+      testRuns
+        .filter((t) => !t.error)
+        .forEach((test) => {
+          console.log(`logStream: ${test.logStream}`)
+        })
     }
   }
 

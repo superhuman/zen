@@ -43,11 +43,14 @@ class ChromeActions {
           headed: this.headed,
         })
       } else {
-        results = await this.zen.lambdaInvoke(this.zen.config.lambdaNames.workTests, {
-          testNames,
-          sessionId,
-          awsRegion,
-        })
+        results = await this.zen.lambdaInvoke(
+          this.zen.config.lambdaNames.workTests,
+          {
+            testNames,
+            sessionId,
+            awsRegion,
+          }
+        )
       }
       return results
     } catch (e) {

@@ -1,3 +1,8 @@
+# 2025-07-21 0.5.2
+
+- Fix aws credential passing
+- Reformat code
+
 # 2025-07-21 0.5.1
 
 - Empty version bump to debug issue.

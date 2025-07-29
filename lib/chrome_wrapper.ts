@@ -146,9 +146,12 @@ class ChromeTab {
       return this.headed
     })
 
-    await this.page.exposeFunction('zenReportListTestError', (message: string) => {
-      this._listTestErrors.push(message)
-    })
+    await this.page.exposeFunction(
+      'zenReportListTestError',
+      (message: string) => {
+        this._listTestErrors.push(message)
+      }
+    )
 
     if (this.isRemote) {
       await this.page.evaluateOnNewDocument(() => {
@@ -223,9 +226,7 @@ class ChromeTab {
 
       if (this._listTestErrors.length) {
         this.listRequest.reject(
-          new Error(
-            `Failed with errors:\n${this._listTestErrors.join('\n')}`
-          )
+          new Error(`Failed with errors:\n${this._listTestErrors.join('\n')}`)
         )
       }
 
