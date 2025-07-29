@@ -93,6 +93,9 @@ declare global {
   }
 }
 
+// if you update this update TEST_TIMEOUT in chrome_wrapper.ts
+const MAX_TEST_TIMEOUT = 30_000
+
 // TODO refactor latte into a class, this will make the typing way easier
 
 // Right now there is nothing to export, but TS requires this to do the editing of Window
@@ -454,6 +457,10 @@ declare global {
 
     context.zen = helpers || {}
     context.zen.extendRemoteTimeout = (ms: number) => {
+      if (ms > MAX_TEST_TIMEOUT) {
+        throw new Error(`Timeout exeeded max timeout of ${MAX_TEST_TIMEOUT}ms of lambda worker. Please make your test faster or if you absolutely have to update the max lambda timeout.`)
+      }
+
       realClearTimeout(currentTimeout)
       setTimeoutPromise(ms)
     }

@@ -37,7 +37,8 @@ type FileManifest = {
   assetUrl: string
 }
 
-const TEST_TIMEOUT = 45_000
+// if you update this update MAX_TEST_TIMEOUT in latte.ts
+const TEST_TIMEOUT = 30_000
 
 class ChromeTab {
   codeHash?: string
