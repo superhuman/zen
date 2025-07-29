@@ -1,3 +1,7 @@
+# 2025-07-21 0.5.1
+
+- Empty version bump to debug issue.
+
 # 2025-07-21 0.5.0
 
 - Add new command line flags:
