@@ -1,3 +1,7 @@
+# 2025-07-28 0.5.5
+
+- Fixup logging
+
 # 2025-07-28 0.5.4
 
 - Add reload for local dev worker
