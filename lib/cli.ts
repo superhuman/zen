@@ -113,7 +113,7 @@ async function run(zen: Zen, opts: CLIOptions) {
 
       await zen.webpack.build()
 
-      testRunMeasure.mark(`Webpack Build Time`)
+      testRunMeasure.mark(`webpack_build_time`)
 
       console.log('Syncing to S3')
       zen.s3Sync.on(
@@ -121,7 +121,7 @@ async function run(zen: Zen, opts: CLIOptions) {
         (msg: string) => (opts.debug || process.env.DEBUG) && console.log(msg)
       )
       await zen.s3Sync.run(zen.indexHtml('worker', true))
-      testRunMeasure.mark(`Sync Time`)
+      testRunMeasure.mark(`sync_time`)
     }
 
     console.log('Getting test names')
@@ -144,7 +144,7 @@ async function run(zen: Zen, opts: CLIOptions) {
       workingSet = workingSet.slice(0, opts.limit)
     }
 
-    testRunMeasure.mark(`Test Name Get Time`)
+    testRunMeasure.mark(`test_name_get_time`)
 
     console.log(
       `Running ${workingSet.length} test${workingSet.length > 1 ? 's' : ''}`
@@ -157,7 +157,7 @@ async function run(zen: Zen, opts: CLIOptions) {
       tests: workingSet,
     })
 
-    testRunMeasure.mark('Run Tests')
+    testRunMeasure.mark('run_tests_time')
 
     const resultStatistics = generateTestResultStatistics(testResults)
 
@@ -166,7 +166,7 @@ async function run(zen: Zen, opts: CLIOptions) {
 
       for (const testName in testResults) {
         const testRuns = testResults[testName]
-        let attempt
+        let attempt = 0
         for (const testRun of testRuns) {
           attempt++
           metrics.push({
@@ -179,18 +179,16 @@ async function run(zen: Zen, opts: CLIOptions) {
         }
       }
 
-      metrics.push({
-        name: 'log.zen_test_run',
-        fields: {
-          ...testRunMeasure.getMetric(),
-          result: resultStatistics.failCount === 0 ? 'pass' : 'fail',
-          fail_count: resultStatistics.failCount,
-          user_flake_count: resultStatistics.userLevelFlakedTests.length,
-          framework_flake_count:
-            resultStatistics.frameworkLevelFlakedTests.length,
-          total_count: resultStatistics.failCount + resultStatistics.passCount,
-        },
+      const testRunMetric = testRunMeasure.getMetric()
+      Object.assign(testRunMetric.fields, {
+        result: resultStatistics.failCount === 0 ? 'pass' : 'fail',
+        fail_count: resultStatistics.failCount,
+        user_flake_count: resultStatistics.userLevelFlakedTests.length,
+        framework_flake_count:
+        resultStatistics.frameworkLevelFlakedTests.length,
+        total_count: resultStatistics.failCount + resultStatistics.passCount,
       })
+      metrics.push(testRunMetric)
       try {
         await zen.profiler.logBatch(metrics)
       } catch (e) {
@@ -198,7 +196,7 @@ async function run(zen: Zen, opts: CLIOptions) {
       }
     }
 
-    testRunMeasure.mark('Collect Statistics')
+    testRunMeasure.mark('collect_statistics_time')
 
     printRunStatistics({
       resultStatistics,
@@ -308,9 +306,11 @@ function printRunStatistics({
     for (const testName of passedTests) {
       const testRuns = testResults[testName]
       console.log(`🟢 ${testName}`)
-      testRuns.filter((t) => !t.error).forEach((test) => {
-        console.log(`logStream: ${test.logStream}`)
-      })
+      testRuns
+        .filter((t) => !t.error)
+        .forEach((test) => {
+          console.log(`logStream: ${test.logStream}`)
+        })
     }
   }
 
@@ -381,7 +381,7 @@ function printRunStatistics({
   if (process.env.VERBOSE === 'true') {
     printHeading('Performance Report')
     testRunMeasure.getMarks().forEach((mark) => {
-      console.log(`- ${mark.name}: ${getHumanReadableTime(mark.duration)}`)
+      console.log(`- ${mark.name.replace('_', ' ')}: ${getHumanReadableTime(mark.duration)}`)
     })
   }
 

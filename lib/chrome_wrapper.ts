@@ -37,7 +37,8 @@ type FileManifest = {
   assetUrl: string
 }
 
-const TEST_TIMEOUT = 45_000
+// if you update this update MAX_TEST_TIMEOUT in latte.ts
+const TEST_TIMEOUT = 30_000
 
 class ChromeTab {
   codeHash?: string
@@ -146,9 +147,12 @@ class ChromeTab {
       return this.headed
     })
 
-    await this.page.exposeFunction('zenReportListTestError', (message: string) => {
-      this._listTestErrors.push(message)
-    })
+    await this.page.exposeFunction(
+      'zenReportListTestError',
+      (message: string) => {
+        this._listTestErrors.push(message)
+      }
+    )
 
     if (this.isRemote) {
       await this.page.evaluateOnNewDocument(() => {
@@ -223,9 +227,7 @@ class ChromeTab {
 
       if (this._listTestErrors.length) {
         this.listRequest.reject(
-          new Error(
-            `Failed with errors:\n${this._listTestErrors.join('\n')}`
-          )
+          new Error(`Failed with errors:\n${this._listTestErrors.join('\n')}`)
         )
       }
 

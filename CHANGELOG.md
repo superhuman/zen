@@ -1,3 +1,26 @@
+# 2025-07-28 0.5.5
+
+- Fixup logging
+
+# 2025-07-28 0.5.4
+
+- Add reload for local dev worker
+
+# 2025-07-28 0.5.3
+
+- Update queue reporting interval in ci
+- Downgrade timeout to 30 seconds.
+- Add error if extendRemoteTimeout exceeds max.
+
+# 2025-07-28 0.5.2
+
+- Fix aws credential passing
+- Reformat code
+
+# 2025-07-28 0.5.1
+
+- Empty version bump to debug issue.
+
 # 2025-07-21 0.5.0
 
 - Add new command line flags:

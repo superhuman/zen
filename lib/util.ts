@@ -193,6 +193,8 @@ class Util {
       headed: opts.headed,
     })
 
+    const attemptsForTest: Record<string, number> = {}
+
     function runTestGroup(group: { tests: string[] }) {
       queue.add(async () => {
         let lambdaTestResults: LambdaTestResult[] =
@@ -214,7 +216,7 @@ class Util {
             logStream: lambdaResult.logStream,
             requestId: lambdaResult.requestId,
           })
-          const testAttempts = testResults[testName].length
+          const testAttempts = attemptsForTest[testName] || 1
 
           let finalAttempt = true
 
@@ -231,8 +233,21 @@ class Util {
             lambdaResult.error &&
             testAttempts < opts.maxAttempts
           ) {
+            // If we did one retry we run the rest of the retries in parellel for performance.
+            // We wait for one retry to avoid spamming lambad.
+            if (testAttempts > 2) {
+              attemptsForTest[testName] = opts.maxAttempts
+
+              const remainingAttempts = opts.maxAttempts - testAttempts
+              for (let i = 0; i < remainingAttempts; i++) {
+                testRetries.push(testName)
+              }
+            } else {
+              attemptsForTest[testName] = testAttempts + 1
+              testRetries.push(testName)
+            }
+
             finalAttempt = false
-            testRetries.push(testName)
           }
 
           if (onResult) {
@@ -256,11 +271,14 @@ class Util {
         runTestGroup(group)
       }
 
-      const intervalId = setInterval(() => {
-        if (queue.pending || queue.size) {
-          console.log(`${queue.pending} In Flight - ${queue.size} in Queue`)
-        }
-      }, 1_000)
+      const intervalId = setInterval(
+        () => {
+          if (queue.pending || queue.size) {
+            console.log(`${queue.pending} In Flight - ${queue.size} in Queue`)
+          }
+        },
+        process.env.CI ? 30_000 : 1_000
+      )
 
       queue.on('idle', () => {
         clearInterval(intervalId)
