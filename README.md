@@ -4,7 +4,7 @@ Zen is a test running that runs tests on lambda in a very parallel way. Overview
 
 - Code in cli.ts handles command line args and sending messages to lambda worker.
 - We run the `listTests` function on aws lambda. This gets us all the test names. Test names are gotten by loading the code and all of the it(’’) blocks register the tests.
-  - Tests can’t be known statically since we do thingsl like `it(`run thing ${n}, function ()` { … })
+  - Tests can’t be known statically since we do things like `it(`run thing ${n}, function ()` { … })
 - We take all of the test names split them up into groups and run them in parallel. The actual test running happens on the lambda worker via workTests.
   - When we run the test on lambda we are running a full chrome headless browser via puppeteer.
 - We gather the results and print them out.

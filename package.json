@@ -38,17 +38,17 @@
     "@aws-sdk/client-s3": "3.842.0",
     "@aws-sdk/lib-storage": "3.840.0",
     "@aws-sdk/node-http-handler": "^3.374.0",
-    "@sparticuz/chromium": "137.0.1",
+    "@sparticuz/chromium": "141.0.0",
     "btoa": "^1.2.1",
     "connect": "^3.6.1",
     "fuzzysort": "^1.1.4",
     "klaw": "^2.1.1",
     "lodash": "^4.17.21",
     "mime-types": "^2.1.17",
-    "node-fetch": "^2.3.0",
+    "node-fetch": "^2.7.0",
     "p-queue": "^8.1.0",
-    "puppeteer": "24.10.2",
-    "puppeteer-core": "^24.12.0",
+    "puppeteer": "^24.23.0",
+    "puppeteer-core": "^24.23.0",
     "sugar": "^2.0.4",
     "svelte": "2.16.1",
     "uuid": "^3.3.2",
@@ -73,7 +73,11 @@
     "ts-node": "^10.4.0",
     "typescript": "^5.8.3",
     "webpack": "4.47.0",
-    "webpack-dev-server": "^3.4"
+    "webpack-dev-server": "^3.11"
+  },
+  "resolutions": {
+    "webpack/**/watchpack/**/chokidar": "^3.0.0",
+    "webpack-dev-server/**/chokidar": "^3.0.0"
   },
   "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }
