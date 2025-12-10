@@ -1,6 +1,6 @@
 import path from 'path'
 import webpack, { Chunk } from 'webpack'
-import WebpackDevServer from 'webpack-dev-server'
+import webpackDevMiddleware from 'webpack-dev-middleware'
 import EventEmitter from 'events'
 
 import type { Configuration as WebpackConfig, Compiler, Stats } from 'webpack'
@@ -23,7 +23,9 @@ type File = {
   body: string | Buffer
 }
 
-type webpackStats = Stats & {
+type webpackStats = {
+  hash: string | undefined
+  compilation: Stats['compilation']
   files: File[]
   entrypoints: string[]
   errors: string[]
@@ -37,6 +39,8 @@ class WebpackAdapter extends EventEmitter {
   compile?: state
   status?: state['status']
   private zenConfig?: ZenConfig
+  private lastDoneTime?: number
+  private readonly RECOMPILE_DEBOUNCE_MS = 5000 // Ignore recompilations within 5s of done
 
   constructor(zenConfig: ZenConfig) {
     super()
@@ -46,7 +50,6 @@ class WebpackAdapter extends EventEmitter {
     this.addWebpackClient(webpackConfig)
 
     if (!webpackConfig.plugins) webpackConfig.plugins = []
-    webpackConfig.plugins.push(new webpack.ExtendedAPIPlugin())
     webpackConfig.plugins.push(
       new webpack.ProgressPlugin((pct, message) => {
         if (pct > 0 && pct < 1)
@@ -57,8 +60,6 @@ class WebpackAdapter extends EventEmitter {
           })
       })
     )
-
-    webpackConfig.plugins.push(new webpack.NamedModulesPlugin())
     this.compiler = webpack(webpackConfig)
 
     this.compiler.hooks.invalid.tap('Zen', () =>
@@ -98,40 +99,46 @@ class WebpackAdapter extends EventEmitter {
 
   startDevServer(server: Server) {
     const zenConfig = this.zenConfig
-    if (zenConfig?.setDevelopmentHeaders) {
-      // @ts-expect-error
-      WebpackDevServer.prototype.setContentHeaders = function (req, res, next) {
-        if (this.headers) {
-          for (var name in this.headers) {
-            res.setHeader(name, this.headers[name])
-          }
-        }
-
-        zenConfig.setDevelopmentHeaders(req, res)
-        next()
-      }
-    }
-
-    const devServer = new WebpackDevServer(this.compiler, {
-      stats: { errorDetails: true },
-      hot: true,
-      inline: false,
+    
+    // publicPath is '/' because Connect strips the mount path '/webpack'
+    const middleware = webpackDevMiddleware(this.compiler, {
+      publicPath: '/',
+      writeToDisk: false,
     })
 
-    // @ts-expect-error app does exist in this version of dev server
-    server.use('/webpack', devServer.app)
+    // Add custom headers middleware if configured
+    if (zenConfig?.setDevelopmentHeaders) {
+      server.use((req, res, next) => {
+        zenConfig.setDevelopmentHeaders(req, res)
+        next()
+      })
+    }
+
+    server.use('/webpack', middleware)
   }
 
   onStats(stats: Stats) {
+    const hash = stats.hash
     const errors = (stats.compilation.errors || []).map((e) => {
       return e.module ? `${e.module.id}: ${e.message}` : e.message
     })
 
-    const state = Object.assign(stats, {
-      files: Object.keys(stats.compilation.assets).map((name) => {
-        const source = stats.compilation.assets[name].source()
-        return { path: `webpack/${name}`, body: source }
-      }),
+    // Create new object since stats.hash is a read-only getter
+    const state: webpackStats = {
+      hash,
+      compilation: stats.compilation,
+      // Handle SizeOnlySource assets that don't expose .source()
+      files: Object.keys(stats.compilation.assets)
+        .map((name) => {
+          try {
+            const asset = stats.compilation.assets[name]
+            const source = typeof asset.source === 'function' ? asset.source() : null
+            return source ? { path: `webpack/${name}`, body: source } : null
+          } catch (e) {
+            return null
+          }
+        })
+        .filter((f): f is File => f !== null),
 
       entrypoints:
         stats.compilation.entrypoints
@@ -141,12 +148,24 @@ class WebpackAdapter extends EventEmitter {
 
       errors,
       status: errors.length ? ('error' as const) : ('done' as const),
-    })
+    } as webpackStats
 
     this.onStateChange(state)
   }
 
   onStateChange(state: state) {
+    // Debounce rapid recompilations after done (workers reloading can trigger rebuilds)
+    if (state.status === 'compiling' && this.lastDoneTime) {
+      const timeSinceDone = Date.now() - this.lastDoneTime
+      if (timeSinceDone < this.RECOMPILE_DEBOUNCE_MS) {
+        return
+      }
+    }
+    
+    if (state.status === 'done') {
+      this.lastDoneTime = Date.now()
+    }
+    
     this.compile = state
     this.status = state.status
     this.emit('status', this.status, state)
