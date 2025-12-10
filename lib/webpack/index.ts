@@ -39,8 +39,7 @@ class WebpackAdapter extends EventEmitter {
   compile?: state
   status?: state['status']
   private zenConfig?: ZenConfig
-  private lastDoneTime?: number
-  private readonly RECOMPILE_DEBOUNCE_MS = 5000 // Ignore recompilations within 5s of done
+  private lastDoneHash?: string
 
   constructor(zenConfig: ZenConfig) {
     super()
@@ -62,15 +61,18 @@ class WebpackAdapter extends EventEmitter {
     )
     this.compiler = webpack(webpackConfig)
 
-    this.compiler.hooks.invalid.tap('Zen', () =>
+    this.compiler.hooks.invalid.tap('Zen', () => {
       this.onStateChange({ status: 'compiling' })
-    )
-    this.compiler.hooks.compile.tap('Zen', () =>
+    })
+    
+    this.compiler.hooks.compile.tap('Zen', () => {
       this.onStateChange({ status: 'compiling' })
-    )
+    })
+    
     this.compiler.hooks.failed.tap('Zen', (error: Error) =>
       this.onStateChange({ status: 'error', errors: [error] })
     )
+    
     this.compiler.hooks.done.tap('Zen', this.onStats.bind(this))
   }
 
@@ -119,6 +121,12 @@ class WebpackAdapter extends EventEmitter {
 
   onStats(stats: Stats) {
     const hash = stats.hash
+    
+    // Guard against duplicate done events for the same compilation
+    if (hash === this.lastDoneHash) {
+      return
+    }
+    
     const errors = (stats.compilation.errors || []).map((e) => {
       return e.module ? `${e.module.id}: ${e.message}` : e.message
     })
@@ -150,20 +158,32 @@ class WebpackAdapter extends EventEmitter {
       status: errors.length ? ('error' as const) : ('done' as const),
     } as webpackStats
 
+    this.lastDoneHash = hash
     this.onStateChange(state)
   }
 
   onStateChange(state: state) {
-    // Debounce rapid recompilations after done (workers reloading can trigger rebuilds)
-    if (state.status === 'compiling' && this.lastDoneTime) {
-      const timeSinceDone = Date.now() - this.lastDoneTime
-      if (timeSinceDone < this.RECOMPILE_DEBOUNCE_MS) {
-        return
-      }
+    // Webpack's ProgressPlugin fires stale 99% events after compilation finishes.
+    // Ignore compiling events with high percentage when we're already done.
+    if (
+      this.status === 'done' &&
+      state.status === 'compiling' &&
+      'percentage' in state &&
+      state.percentage !== undefined &&
+      state.percentage >= 99
+    ) {
+      return
     }
     
-    if (state.status === 'done') {
-      this.lastDoneTime = Date.now()
+    // Skip duplicate compiling states at the same percentage
+    if (
+      state.status === 'compiling' &&
+      this.compile?.status === 'compiling' &&
+      'percentage' in state &&
+      'percentage' in this.compile &&
+      state.percentage === this.compile.percentage
+    ) {
+      return
     }
     
     this.compile = state
