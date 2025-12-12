@@ -216,6 +216,14 @@ class Util {
             logStream: lambdaResult.logStream,
             requestId: lambdaResult.requestId,
           })
+          console.log('testResults', {
+            name: lambdaResult.fullName,
+            result: lambdaResult.error ? 'fail' : 'pass',
+            duration: lambdaResult.time,
+            error: lambdaResult.error,
+            logStream: lambdaResult.logStream,
+            requestId: lambdaResult.requestId,
+          });
           const testAttempts = attemptsForTest[testName] || 1
 
           let finalAttempt = true

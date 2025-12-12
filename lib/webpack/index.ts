@@ -39,7 +39,8 @@ class WebpackAdapter extends EventEmitter {
   compile?: state
   status?: state['status']
   private zenConfig?: ZenConfig
-  private lastDoneHash?: string
+  private lastDoneTime?: number
+  private readonly RECOMPILE_DEBOUNCE_MS = 5000 // Ignore recompilations within 5s of done
 
   constructor(zenConfig: ZenConfig) {
     super()
@@ -61,18 +62,15 @@ class WebpackAdapter extends EventEmitter {
     )
     this.compiler = webpack(webpackConfig)
 
-    this.compiler.hooks.invalid.tap('Zen', () => {
+    this.compiler.hooks.invalid.tap('Zen', () =>
       this.onStateChange({ status: 'compiling' })
-    })
-    
-    this.compiler.hooks.compile.tap('Zen', () => {
+    )
+    this.compiler.hooks.compile.tap('Zen', () =>
       this.onStateChange({ status: 'compiling' })
-    })
-    
+    )
     this.compiler.hooks.failed.tap('Zen', (error: Error) =>
       this.onStateChange({ status: 'error', errors: [error] })
     )
-    
     this.compiler.hooks.done.tap('Zen', this.onStats.bind(this))
   }
 
@@ -121,32 +119,73 @@ class WebpackAdapter extends EventEmitter {
 
   onStats(stats: Stats) {
     const hash = stats.hash
-    
-    // Guard against duplicate done events for the same compilation
-    if (hash === this.lastDoneHash) {
-      return
-    }
-    
     const errors = (stats.compilation.errors || []).map((e) => {
       return e.module ? `${e.module.id}: ${e.message}` : e.message
     })
+
+    // Get files from compilation assets
+    // In Webpack 5, we need to use getAsset() and handle different source types
+    const files: File[] = []
+    const outputPath = stats.compilation.outputOptions.path || ''
+    const outputFileSystem = this.compiler.outputFileSystem
+    
+    const assetNames = Object.keys(stats.compilation.assets)
+    console.log(`[Zen Webpack] Processing ${assetNames.length} assets, outputPath: ${outputPath}`)
+    console.log(`[Zen Webpack] outputFileSystem available: ${!!outputFileSystem}, has readFileSync: ${!!(outputFileSystem && typeof (outputFileSystem as any).readFileSync === 'function')}`)
+    
+    for (const name of assetNames) {
+      try {
+        let content: string | Buffer | null = null
+        
+        // Try reading from compiler's outputFileSystem (set by webpack-dev-middleware)
+        if (outputFileSystem && typeof (outputFileSystem as any).readFileSync === 'function') {
+          try {
+            const filePath = path.join(outputPath, name)
+            content = (outputFileSystem as any).readFileSync(filePath)
+            if (content) {
+              console.log(`[Zen Webpack] Read ${name} from outputFileSystem (${content.length} bytes)`)
+            }
+          } catch (e) {
+            // File not available in outputFileSystem
+          }
+        }
+        
+        // Fall back to getting source from compilation asset
+        if (!content) {
+          const asset = stats.compilation.getAsset(name)
+          if (asset?.source) {
+            // Check if it's a readable source (not SizeOnlySource)
+            const sourceName = asset.source.constructor?.name || 'unknown'
+            if (sourceName !== 'SizeOnlySource') {
+              try {
+                content = asset.source.source()
+                if (content) {
+                  console.log(`[Zen Webpack] Read ${name} from asset.source (${typeof content === 'string' ? content.length : (content as Buffer).length} bytes, source type: ${sourceName})`)
+                }
+              } catch (e) {
+                console.log(`[Zen Webpack] Failed to read ${name} from asset.source (${sourceName}): ${e}`)
+              }
+            } else {
+              console.log(`[Zen Webpack] Skipping ${name} - SizeOnlySource`)
+            }
+          }
+        }
+        
+        if (content) {
+          files.push({ path: `webpack/${name}`, body: content })
+        }
+      } catch (e) {
+        console.log(`[Zen Webpack] Error processing ${name}: ${e}`)
+      }
+    }
+
+    console.log(`[Zen Webpack] Total files collected: ${files.length}`)
 
     // Create new object since stats.hash is a read-only getter
     const state: webpackStats = {
       hash,
       compilation: stats.compilation,
-      // Handle SizeOnlySource assets that don't expose .source()
-      files: Object.keys(stats.compilation.assets)
-        .map((name) => {
-          try {
-            const asset = stats.compilation.assets[name]
-            const source = typeof asset.source === 'function' ? asset.source() : null
-            return source ? { path: `webpack/${name}`, body: source } : null
-          } catch (e) {
-            return null
-          }
-        })
-        .filter((f): f is File => f !== null),
+      files,
 
       entrypoints:
         stats.compilation.entrypoints
@@ -158,32 +197,22 @@ class WebpackAdapter extends EventEmitter {
       status: errors.length ? ('error' as const) : ('done' as const),
     } as webpackStats
 
-    this.lastDoneHash = hash
+    console.log(`[Zen Webpack] State: status=${state.status}, files=${state.files.length}, entrypoints=${state.entrypoints}`)
+
     this.onStateChange(state)
   }
 
   onStateChange(state: state) {
-    // Webpack's ProgressPlugin fires stale 99% events after compilation finishes.
-    // Ignore compiling events with high percentage when we're already done.
-    if (
-      this.status === 'done' &&
-      state.status === 'compiling' &&
-      'percentage' in state &&
-      state.percentage !== undefined &&
-      state.percentage >= 99
-    ) {
-      return
+    // Debounce rapid recompilations after done (workers reloading can trigger rebuilds)
+    if (state.status === 'compiling' && this.lastDoneTime) {
+      const timeSinceDone = Date.now() - this.lastDoneTime
+      if (timeSinceDone < this.RECOMPILE_DEBOUNCE_MS) {
+        return
+      }
     }
     
-    // Skip duplicate compiling states at the same percentage
-    if (
-      state.status === 'compiling' &&
-      this.compile?.status === 'compiling' &&
-      'percentage' in state &&
-      'percentage' in this.compile &&
-      state.percentage === this.compile.percentage
-    ) {
-      return
+    if (state.status === 'done') {
+      this.lastDoneTime = Date.now()
     }
     
     this.compile = state
