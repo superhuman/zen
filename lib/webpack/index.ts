@@ -181,23 +181,32 @@ class WebpackAdapter extends EventEmitter {
 
     console.log(`[Zen Webpack] Total files collected: ${files.length}`)
 
+    // Log available entrypoint names for debugging
+    const entrypointNames = Array.from(stats.compilation.entrypoints.keys())
+    console.log(`[Zen Webpack] Available entrypoint names: ${entrypointNames.join(', ')}`)
+
+    // Collect all entrypoint files (not just 'bundle')
+    const entrypoints: string[] = []
+    for (const [name, entrypoint] of stats.compilation.entrypoints) {
+      for (const chunk of entrypoint.chunks) {
+        for (const file of chunk.files) {
+          console.log(`[Zen Webpack] Entrypoint '${name}' -> ${file}`)
+          entrypoints.push(file)
+        }
+      }
+    }
+
     // Create new object since stats.hash is a read-only getter
     const state: webpackStats = {
       hash,
       compilation: stats.compilation,
       files,
-
-      entrypoints:
-        stats.compilation.entrypoints
-          .get('bundle')
-          ?.chunks.map((chunk: Chunk) => chunk.files.values().next().value) ||
-        [],
-
+      entrypoints,
       errors,
       status: errors.length ? ('error' as const) : ('done' as const),
     } as webpackStats
 
-    console.log(`[Zen Webpack] State: status=${state.status}, files=${state.files.length}, entrypoints=${state.entrypoints}`)
+    console.log(`[Zen Webpack] State: status=${state.status}, files=${state.files.length}, entrypoints=${state.entrypoints.join(', ')}`)
 
     this.onStateChange(state)
   }
