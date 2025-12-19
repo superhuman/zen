@@ -135,13 +135,10 @@ class ChromeTab {
   async setupExposedFunctions() {
     // Expose Zen functions to the page context
     await this.page.exposeFunction('zenIdle', () => {
-      console.log(`[${this.id}] zenIdle called, state: ${this.state}, closed: ${this.closed}`)
       if (this.closed) return
 
       if (this.state === 'loading' || this.state === 'starting') {
         this.becomeIdle()
-      } else {
-        console.log(`[${this.id}] zenIdle ignored - state is ${this.state}`)
       }
     })
 
@@ -154,14 +151,11 @@ class ChromeTab {
     })
 
     await this.page.exposeFunction('zenResults', (results: any) => {
-      console.log(`[${this.id}] zenResults called, state: ${this.state}, results:`, results?.fullName || results)
       if (this.closed) return
 
       if (this.state === 'running') {
         this.finishTest(results)
         this.becomeIdle()
-      } else {
-        console.log(`[${this.id}] zenResults ignored - state is ${this.state}`)
       }
     })
 
@@ -209,9 +203,7 @@ class ChromeTab {
 
   resolveWork?: (value: unknown) => void
   setTest(test: Test) {
-    console.log(`[${this.id}] setTest called: ${test.testName}, current state: ${this.state}, existing test: ${this.test?.testName || 'none'}`)
     if (this.test) {
-      console.log(`[${this.id}] Resolving previous test with null`)
       this.resolveWork?.(null)
     }
 
@@ -221,16 +213,11 @@ class ChromeTab {
     })
     this.test = test
     if (this.state === 'idle') {
-      console.log(`[${this.id}] State is idle, calling run()`)
       this.run()
     } else if (this.state === 'running') {
-      console.log(`[${this.id}] State is running, calling reload()`)
       this.reload()
     } else if (this.state === 'badCode') {
-      console.log(`[${this.id}] State is badCode, failing test`)
       this.failTest(this.badCodeError || '', this.badCodeStack || '')
-    } else {
-      console.log(`[${this.id}] State is ${this.state}, waiting for page to become idle`)
     }
 
     return promise
@@ -309,36 +296,26 @@ class ChromeTab {
   badCodeError?: string
   badCodeStack?: string
   badCode(msg: string, stack: string[]) {
-    console.log(`[${this.id}] badCode called: ${msg}`)
-    console.log(`[${this.id}] Stack:`, stack.slice(0, 5))
     this.changeState('badCode')
     this.badCodeError = msg
     this.badCodeStack = stack.join('\n')
 
     if (this.test) {
-      console.log(`[${this.id}] Failing pending test due to bad code`)
       this.failTest(msg, stack.join('\n'))
     }
     if (this.listRequest) {
-      console.log(`[${this.id}] Rejecting list request due to bad code`)
       this.listRequest.reject(msg)
     }
   }
 
   becomeIdle() {
-    console.log(`[${this.id}] becomeIdle called, codeHash: ${!!this.codeHash}, test: ${this.test?.testName || 'none'}, listRequest: ${!!this.listRequest}`)
     this.changeState('idle')
     if (this.codeHash) {
-      console.log(`[${this.id}] -> hotReload`)
       this.hotReload()
     } else if (this.test) {
-      console.log(`[${this.id}] -> run test: ${this.test.testName}`)
       this.run()
     } else if (this.listRequest) {
-      console.log(`[${this.id}] -> listTests`)
       this.listTests()
-    } else {
-      console.log(`[${this.id}] -> nothing to do, staying idle`)
     }
   }
 
@@ -346,19 +323,16 @@ class ChromeTab {
     this.changeState('loading')
     this.timeout = setTimeout(this.onTimeout, TEST_TIMEOUT)
     this.codeHash = undefined
-    console.log(`[${this.id}] reloading`)
     this.page.reload()
   }
 
   onTimeout = () => {
-    console.log(`[${this.id}] onTimeout fired, state: ${this.state}, headed: ${this.headed}`)
     if (this.headed) {
-      console.log(`[${this.id}] Ignoring timeout in headed mode`)
       return
     }
 
     if (this.state === 'loading' && this.rejectWork) {
-      console.log(`[${this.id}] timeout while loading - rejecting work`)
+      console.log(`[${this.id}] timeout while loading`)
       // In the case we timed out on loading this indicates our browser
       // process isn't loading at all. In this case we want to kill and restart
       // our chrome process.
@@ -367,17 +341,13 @@ class ChromeTab {
     }
 
     if (this.state == 'running') {
-      console.log(`[${this.id}] timeout while running - failing test`)
       this.failTest('Chrome-level test timeout')
     } else if (this.state == 'hotReload') {
       console.log(`[${this.id}] timeout while hotReloading`)
-    } else if (this.state == 'starting') {
-      console.log(`[${this.id}] timeout while starting - page never called zenIdle`)
     }
 
     // If we hit a timeout, the page is likely stuck and we don't really know
     // if it's safe to run tests. The best we can do is reload.
-    console.log(`[${this.id}] Reloading page due to timeout`)
     this.reload()
   }
 
@@ -676,8 +646,7 @@ export default class ChromeWrapper {
     manifest?: FileManifest
   }): Promise<ChromeTab> {
     const { url, id, config, manifest } = tabConfig
-    console.log(`[ChromeWrapper] openTab called for ${id}, url: ${url}`)
-    
+
     // Store config for potential tab reset (used in single-tab mode)
     // Note: In multi-tab mode (local workers), callers manage their own tabs
     this.tabConfig = tabConfig
@@ -685,9 +654,7 @@ export default class ChromeWrapper {
     // TODO: kill on fail
     if (!this.browser) throw new Error('Browser not setup')
 
-    console.log(`[ChromeWrapper] Getting browser instance...`)
     const browser = await this.browser
-    console.log(`[ChromeWrapper] Creating new page for ${id}...`)
     const page = await browser.newPage()
     page.setViewport({
       width: DEFAULT_BROWSER_WIDTH,
@@ -707,7 +674,6 @@ export default class ChromeWrapper {
       isRemote: this.isRemote,
     })
 
-    console.log(`[ChromeWrapper] Setting up exposed functions for ${id}...`)
     await tab.setupExposedFunctions()
 
     // Store reference for single-tab mode operations (runTest, closeTab, resetTab)
@@ -722,9 +688,7 @@ export default class ChromeWrapper {
       navigateUrl = `http://localhost:${serverPort}/index.html`
     }
 
-    console.log(`[ChromeWrapper] Navigating ${id} to ${navigateUrl}...`)
     await page.goto(navigateUrl)
-    console.log(`[ChromeWrapper] Navigation complete for ${id}, tab state: ${tab.state}`)
 
     return tab
   }

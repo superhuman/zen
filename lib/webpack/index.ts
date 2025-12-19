@@ -130,9 +130,7 @@ class WebpackAdapter extends EventEmitter {
     const outputFileSystem = this.compiler.outputFileSystem
     
     const assetNames = Object.keys(stats.compilation.assets)
-    console.log(`[Zen Webpack] Processing ${assetNames.length} assets, outputPath: ${outputPath}`)
-    console.log(`[Zen Webpack] outputFileSystem available: ${!!outputFileSystem}, has readFileSync: ${!!(outputFileSystem && typeof (outputFileSystem as any).readFileSync === 'function')}`)
-    
+
     for (const name of assetNames) {
       try {
         let content: string | Buffer | null = null
@@ -142,9 +140,6 @@ class WebpackAdapter extends EventEmitter {
           try {
             const filePath = path.join(outputPath, name)
             content = (outputFileSystem as any).readFileSync(filePath)
-            if (content) {
-              console.log(`[Zen Webpack] Read ${name} from outputFileSystem (${content.length} bytes)`)
-            }
           } catch (e) {
             // File not available in outputFileSystem
           }
@@ -159,14 +154,9 @@ class WebpackAdapter extends EventEmitter {
             if (sourceName !== 'SizeOnlySource') {
               try {
                 content = asset.source.source()
-                if (content) {
-                  console.log(`[Zen Webpack] Read ${name} from asset.source (${typeof content === 'string' ? content.length : (content as Buffer).length} bytes, source type: ${sourceName})`)
-                }
               } catch (e) {
-                console.log(`[Zen Webpack] Failed to read ${name} from asset.source (${sourceName}): ${e}`)
+                // Failed to read source
               }
-            } else {
-              console.log(`[Zen Webpack] Skipping ${name} - SizeOnlySource`)
             }
           }
         }
@@ -175,22 +165,15 @@ class WebpackAdapter extends EventEmitter {
           files.push({ path: `webpack/${name}`, body: content })
         }
       } catch (e) {
-        console.log(`[Zen Webpack] Error processing ${name}: ${e}`)
+        // Error processing asset
       }
     }
-
-    console.log(`[Zen Webpack] Total files collected: ${files.length}`)
-
-    // Log available entrypoint names for debugging
-    const entrypointNames = Array.from(stats.compilation.entrypoints.keys())
-    console.log(`[Zen Webpack] Available entrypoint names: ${entrypointNames.join(', ')}`)
 
     // Collect all entrypoint files (not just 'bundle')
     const entrypoints: string[] = []
     for (const [name, entrypoint] of stats.compilation.entrypoints) {
       for (const chunk of entrypoint.chunks) {
         for (const file of chunk.files) {
-          console.log(`[Zen Webpack] Entrypoint '${name}' -> ${file}`)
           entrypoints.push(file)
         }
       }
@@ -205,8 +188,6 @@ class WebpackAdapter extends EventEmitter {
       errors,
       status: errors.length ? ('error' as const) : ('done' as const),
     } as webpackStats
-
-    console.log(`[Zen Webpack] State: status=${state.status}, files=${state.files.length}, entrypoints=${state.entrypoints.join(', ')}`)
 
     this.onStateChange(state)
   }
