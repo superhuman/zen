@@ -1,11 +1,11 @@
 import path from 'path'
-import webpack, { Chunk } from 'webpack'
-import webpackDevMiddleware from 'webpack-dev-middleware'
+import webpackDevMiddleware, { type OutputFileSystem } from 'webpack-dev-middleware'
 import EventEmitter from 'events'
 
-import type { Configuration as WebpackConfig, Compiler, Stats } from 'webpack'
+import webpack, { type Configuration as WebpackConfig, type Compiler, type Stats, Module } from 'webpack'
 import type { Server } from 'connect'
 import type { ZenConfig } from '../index'
+import { isFunction } from 'lodash'
 
 type CompilingState = {
   status: 'compiling'
@@ -120,14 +120,15 @@ class WebpackAdapter extends EventEmitter {
   onStats(stats: Stats) {
     const hash = stats.hash
     const errors = (stats.compilation.errors || []).map((e) => {
-      return e.module ? `${e.module.id}: ${e.message}` : e.message
+      const mod = e && 'module' in e ? (e.module as Module | undefined) : undefined
+      return mod ? `${mod.id}: ${e.message}` : e.message
     })
 
     // Get files from compilation assets
     // In Webpack 5, we need to use getAsset() and handle different source types
     const files: File[] = []
     const outputPath = stats.compilation.outputOptions.path || ''
-    const outputFileSystem = this.compiler.outputFileSystem
+    const outputFileSystem = this.compiler.outputFileSystem as OutputFileSystem
     
     const assetNames = Object.keys(stats.compilation.assets)
 
@@ -136,10 +137,10 @@ class WebpackAdapter extends EventEmitter {
         let content: string | Buffer | null = null
         
         // Try reading from compiler's outputFileSystem (set by webpack-dev-middleware)
-        if (outputFileSystem && typeof (outputFileSystem as any).readFileSync === 'function') {
+        if (isFunction(outputFileSystem?.readFileSync)) {
           try {
             const filePath = path.join(outputPath, name)
-            content = (outputFileSystem as any).readFileSync(filePath)
+            content = outputFileSystem.readFileSync(filePath)
           } catch (e) {
             console.log(`[Webpack] File not available in outputFileSystem: ${name}`, e)
           }
@@ -160,10 +161,7 @@ class WebpackAdapter extends EventEmitter {
             }
           }
         }
-        
-        if (content) {
-          files.push({ path: `webpack/${name}`, body: content })
-        }
+        files.push({ path: `webpack/${name}`, body: content })
       } catch (e) {
         console.log(`[Webpack] Error processing asset: ${name}`, e)
       }
