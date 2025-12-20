@@ -169,15 +169,11 @@ class WebpackAdapter extends EventEmitter {
       }
     }
 
-    // Collect all entrypoint files (not just 'bundle')
-    const entrypoints: string[] = []
-    for (const [name, entrypoint] of stats.compilation.entrypoints) {
-      for (const chunk of entrypoint.chunks) {
-        for (const file of chunk.files) {
-          entrypoints.push(file)
-        }
-      }
-    }
+    // Get first file from each chunk in 'bundle' entry (typically the main .js file)
+    const bundleEntry = stats.compilation.entrypoints.get('bundle')
+    const entrypoints = bundleEntry
+      ? bundleEntry.chunks.map(chunk => chunk.files.values().next().value).filter(Boolean)
+      : []
 
     // Create new object since stats.hash is a read-only getter
     const state: webpackStats = {
