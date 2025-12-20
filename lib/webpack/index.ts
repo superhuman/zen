@@ -40,7 +40,7 @@ class WebpackAdapter extends EventEmitter {
   status?: state['status']
   private zenConfig?: ZenConfig
   private lastDoneTime?: number
-  private readonly RECOMPILE_DEBOUNCE_MS = 1500 // Ignore recompilations within 5s of done
+  private readonly RECOMPILE_DEBOUNCE_MS = 1500 // Ignore recompilations within this timeframe
 
   constructor(zenConfig: ZenConfig) {
     super()
