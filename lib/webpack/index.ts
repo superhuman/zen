@@ -40,7 +40,7 @@ class WebpackAdapter extends EventEmitter {
   status?: state['status']
   private zenConfig?: ZenConfig
   private lastDoneTime?: number
-  private readonly RECOMPILE_DEBOUNCE_MS = 5000 // Ignore recompilations within 5s of done
+  private readonly RECOMPILE_DEBOUNCE_MS = 1500 // Ignore recompilations within 5s of done
 
   constructor(zenConfig: ZenConfig) {
     super()
@@ -141,7 +141,7 @@ class WebpackAdapter extends EventEmitter {
             const filePath = path.join(outputPath, name)
             content = (outputFileSystem as any).readFileSync(filePath)
           } catch (e) {
-            // File not available in outputFileSystem
+            console.log(`[Webpack] File not available in outputFileSystem: ${name}`, e)
           }
         }
         
@@ -155,7 +155,7 @@ class WebpackAdapter extends EventEmitter {
               try {
                 content = asset.source.source()
               } catch (e) {
-                // Failed to read source
+                console.log(`[Webpack] Failed to read source for asset: ${name}`, e)
               }
             }
           }
@@ -165,12 +165,14 @@ class WebpackAdapter extends EventEmitter {
           files.push({ path: `webpack/${name}`, body: content })
         }
       } catch (e) {
-        // Error processing asset
+        console.log(`[Webpack] Error processing asset: ${name}`, e)
       }
     }
 
     // Get first file from each chunk in 'bundle' entry (typically the main .js file)
+    // Fall back to first entrypoint if 'bundle' doesn't exist
     const bundleEntry = stats.compilation.entrypoints.get('bundle')
+      || stats.compilation.entrypoints.values().next().value
     const entrypoints = bundleEntry
       ? bundleEntry.chunks.map(chunk => chunk.files.values().next().value).filter(Boolean)
       : []
