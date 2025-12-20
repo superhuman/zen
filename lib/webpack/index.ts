@@ -5,7 +5,7 @@ import EventEmitter from 'events'
 import webpack, { type Configuration as WebpackConfig, type Compiler, type Stats, Module } from 'webpack'
 import type { Server } from 'connect'
 import type { ZenConfig } from '../index'
-import { isFunction } from 'lodash'
+import isFunction from 'lodash/isFunction'
 
 type CompilingState = {
   status: 'compiling'
@@ -24,7 +24,7 @@ type File = {
 }
 
 type webpackStats = {
-  hash: string | undefined
+  hash?: string
   compilation: Stats['compilation']
   files: File[]
   entrypoints: string[]
@@ -99,7 +99,6 @@ class WebpackAdapter extends EventEmitter {
 
   startDevServer(server: Server) {
     const zenConfig = this.zenConfig
-    
     // publicPath is '/' because Connect strips the mount path '/webpack'
     const middleware = webpackDevMiddleware(this.compiler, {
       publicPath: '/',
@@ -176,14 +175,14 @@ class WebpackAdapter extends EventEmitter {
       : []
 
     // Create new object since stats.hash is a read-only getter
-    const state: webpackStats = {
+    const state: state = {
       hash,
       compilation: stats.compilation,
       files,
       entrypoints,
       errors,
-      status: errors.length ? ('error' as const) : ('done' as const),
-    } as webpackStats
+      status: errors.length ? 'error' : 'done'
+    }
 
     this.onStateChange(state)
   }
