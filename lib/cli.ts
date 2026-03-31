@@ -185,7 +185,7 @@ async function run(zen: Zen, opts: CLIOptions) {
         fail_count: resultStatistics.failCount,
         user_flake_count: resultStatistics.userLevelFlakedTests.length,
         framework_flake_count:
-        resultStatistics.frameworkLevelFlakedTests.length,
+          resultStatistics.frameworkLevelFlakedTests.length,
         total_count: resultStatistics.failCount + resultStatistics.passCount,
       })
       metrics.push(testRunMetric)
@@ -381,7 +381,11 @@ function printRunStatistics({
   if (process.env.VERBOSE === 'true') {
     printHeading('Performance Report')
     testRunMeasure.getMarks().forEach((mark) => {
-      console.log(`- ${mark.name.replace('_', ' ')}: ${getHumanReadableTime(mark.duration)}`)
+      console.log(
+        `- ${mark.name.replace('_', ' ')}: ${getHumanReadableTime(
+          mark.duration
+        )}`
+      )
     })
   }
 

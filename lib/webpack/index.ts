@@ -40,7 +40,6 @@ class WebpackAdapter extends EventEmitter {
   status?: state['status']
   private zenConfig?: ZenConfig
   private lastDoneTime?: number
-  private readonly RECOMPILE_DEBOUNCE_MS = 1500 // Ignore recompilations within this timeframe
 
   constructor(zenConfig: ZenConfig) {
     super()
@@ -62,16 +61,22 @@ class WebpackAdapter extends EventEmitter {
     )
     this.compiler = webpack(webpackConfig)
 
-    this.compiler.hooks.invalid.tap('Zen', () =>
+    this.compiler.hooks.beforeCompile.tap('Zen', () => {
+      this.onStateChange({ status: 'start_compile' })
+    })
+
+    this.compiler.hooks.invalid.tap('Zen', () => {
       this.onStateChange({ status: 'compiling' })
-    )
-    this.compiler.hooks.compile.tap('Zen', () =>
+    })
+    this.compiler.hooks.compile.tap('Zen', () => {
       this.onStateChange({ status: 'compiling' })
-    )
-    this.compiler.hooks.failed.tap('Zen', (error: Error) =>
+    })
+    this.compiler.hooks.failed.tap('Zen', (error: Error) => {
       this.onStateChange({ status: 'error', errors: [error] })
-    )
-    this.compiler.hooks.done.tap('Zen', this.onStats.bind(this))
+    })
+    this.compiler.hooks.done.tap('Zen', (stats) => {
+      this.onStats(stats)
+    })
   }
 
   // TODO this will most likely break once webpack is updated
@@ -128,13 +133,13 @@ class WebpackAdapter extends EventEmitter {
     const files: File[] = []
     const outputPath = stats.compilation.outputOptions.path || ''
     const outputFileSystem = this.compiler.outputFileSystem as OutputFileSystem
-    
+
     const assetNames = Object.keys(stats.compilation.assets)
 
     for (const name of assetNames) {
       try {
         let content: string | Buffer | null = null
-        
+
         // Try reading from compiler's outputFileSystem (set by webpack-dev-middleware)
         if (isFunction(outputFileSystem?.readFileSync)) {
           try {
@@ -144,7 +149,7 @@ class WebpackAdapter extends EventEmitter {
             console.log(`[Webpack] File not available in outputFileSystem: ${name}`, e)
           }
         }
-        
+
         // Fall back to getting source from compilation asset
         if (!content) {
           const asset = stats.compilation.getAsset(name)
@@ -188,18 +193,20 @@ class WebpackAdapter extends EventEmitter {
   }
 
   onStateChange(state: state) {
-    // Debounce rapid recompilations after done (workers reloading can trigger rebuilds)
-    if (state.status === 'compiling' && this.lastDoneTime) {
-      const timeSinceDone = Date.now() - this.lastDoneTime
-      if (timeSinceDone < this.RECOMPILE_DEBOUNCE_MS) {
-        return
-      }
+    if (state.status == 'start_compile') {
+      this._isCompiling = true
     }
-    
-    if (state.status === 'done') {
-      this.lastDoneTime = Date.now()
+
+    if (state.status === 'done' || state.status === 'error') {
+      this._isCompiling = false
     }
-    
+
+    // Progress plugin can fire compile events after compile finishes
+    // so we guard against that here.
+    if (!this._isCompiling && state.status === 'compiling') {
+      return
+    }
+
     this.compile = state
     this.status = state.status
     this.emit('status', this.status, state)
