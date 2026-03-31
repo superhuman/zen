@@ -61,20 +61,54 @@ class WebpackAdapter extends EventEmitter {
     )
     this.compiler = webpack(webpackConfig)
 
+    this.compiler.hooks.done.tap('ProfilePlugin', (stats) => {
+      const json = stats.toJson({ all: false, modules: true });
+      const sorted = json.modules
+        .filter(m => m.profile)
+        .sort((a, b) => {
+          const total = (p) => (p.building || 0) + (p.integration || 0) + (p.storing || 0);
+          return total(b.profile) - total(a.profile);
+        })
+        .slice(0, 20);
+
+      sorted.forEach(m => {
+        const p = m.profile;
+        console.log(
+          `${p.building}ms building | ${p.integration}ms integration | ${m.name}`
+        );
+      });
+    })
+
+    this.compiler.hooks.watchRun.tap('DebugPlugin', (compilation) => {
+      const changed = compilation.modifiedFiles;
+      const removed = compilation.removedFiles;
+      console.log('[watch] recompilation triggered at', new Date().toISOString());
+      if (changed) console.log('[watch] changed files:', [...changed]);
+      if (removed) console.log('[watch] removed files:', [...removed]);
+    })
+
     this.compiler.hooks.beforeCompile.tap('Zen', () => {
+      console.log('this.compiler.hooks.beforeCompile')
       this.onStateChange({ status: 'start_compile' })
     })
 
     this.compiler.hooks.invalid.tap('Zen', () => {
+      console.log('this.compiler.hooks.invalid')
       this.onStateChange({ status: 'compiling' })
     })
     this.compiler.hooks.compile.tap('Zen', () => {
+      console.log('this.compiler.hooks.compile')
       this.onStateChange({ status: 'compiling' })
     })
     this.compiler.hooks.failed.tap('Zen', (error: Error) => {
+      console.log('this.compiler.hooks.failed')
       this.onStateChange({ status: 'error', errors: [error] })
     })
-    this.compiler.hooks.done.tap('Zen', this.onStats.bind(this))
+    this.compiler.hooks.done.tap('Zen', (stats) => {
+      console.log('[done] compilation finished at', new Date().toISOString());
+      console.log('[done] hash:', stats.hash);
+      this.onStats(stats)
+    })
   }
 
   // TODO this will most likely break once webpack is updated
@@ -205,8 +239,8 @@ class WebpackAdapter extends EventEmitter {
       return
     }
 
-    console.log('state:', state)
-    console.log('status:', state.status)
+    //console.log('status:', state.status)
+    //console.dir(state, { depth: 0 })
 
     this.compile = state
     this.status = state.status
