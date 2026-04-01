@@ -458,9 +458,7 @@ const MAX_TEST_TIMEOUT = 30_000
     context.zen = helpers || {}
     context.zen.extendRemoteTimeout = (ms: number) => {
       if (ms > MAX_TEST_TIMEOUT) {
-        throw new Error(
-          `Timeout exeeded max timeout of ${MAX_TEST_TIMEOUT}ms of lambda worker. Please make your test faster or if you absolutely have to update the max lambda timeout.`
-        )
+        throw new Error(`Timeout exeeded max timeout of ${MAX_TEST_TIMEOUT}ms of lambda worker. Please make your test faster or if you absolutely have to update the max lambda timeout.`)
       }
 
       realClearTimeout(currentTimeout)
