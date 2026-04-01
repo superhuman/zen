@@ -87,6 +87,11 @@ class ChromeTab {
     this.isRemote = isRemote
     this._listTestErrors = []
 
+    // Handle uncaught page exceptions
+    this.page.on('pageerror', (error: Error) => {
+      this.onPageError(error)
+    })
+
     if (this.isRemote) {
       this.page.on('console', async (message) => {
         console.log(message.text())
@@ -105,6 +110,25 @@ class ChromeTab {
         //  })
         //)
       })
+    }
+  }
+
+  onPageError(error: Error) {
+    const message = error.message || String(error)
+    const stack = error.stack ? error.stack.split('\n') : []
+    console.log(`[${this.id}] Page error:`, message, stack.slice(0, 5))
+
+    // If an error happens while loading/starting, your code is bad and we can't run anything
+    if (this.state === 'loading' || this.state === 'starting') {
+      this.badCode(message, stack)
+    }
+    // Some test suites throw random errors that don't actually fail the test promise.
+    // Since we don't know which exceptions are safe to ignore, just reload.
+    else if (this.state === 'running' && this.config.failOnExceptions) {
+      this.failTest(message, stack.join('\n'))
+      this.reload()
+    } else if (this.state == 'hotReload') {
+      this.reload()
     }
   }
 
@@ -286,16 +310,19 @@ class ChromeTab {
 
   becomeIdle() {
     this.changeState('idle')
-    if (this.codeHash) this.hotReload()
-    else if (this.test) this.run()
-    else if (this.listRequest) this.listTests()
+    if (this.codeHash) {
+      this.hotReload()
+    } else if (this.test) {
+      this.run()
+    } else if (this.listRequest) {
+      this.listTests()
+    }
   }
 
   async reload() {
     this.changeState('loading')
     this.timeout = setTimeout(this.onTimeout, TEST_TIMEOUT)
     this.codeHash = undefined
-    console.log(`[${this.id}] reloading`)
     this.page.reload()
   }
 
@@ -351,35 +378,6 @@ class ChromeTab {
 
     this.resolveWork = undefined
     this.test = undefined
-  }
-
-  onExceptionThrown(opts) {
-    let ex = opts.exceptionDetails,
-      message
-
-    if (ex.exception && ex.exception.className)
-      message = `${ex.exception.className} ${
-        ex.exception.description.split('\n')[0]
-      }`
-    else if (ex.exception.value) message = ex.exception.value
-    else message = ex.text
-
-    let stack = (ex.stackTrace && ex.stackTrace.callFrames) || []
-    stack = stack.map((f) => `${f.functionName} ${f.url}:${f.lineNumber}`)
-    console.log(`[${this.id}]`, message, stack)
-
-    // If an error happens while loading, your code is bad and we can't run anything
-    if (this.state === 'loading') {
-      this.badCode(message, stack)
-    }
-
-    // Some test suites (ie Superhuman) throw random errors that don't actually fail the test promise.
-    // I'd like to track these all down and fix, but until then let us silently ignore, like karma.
-    // Since we don't know which exceptions are safe to ignore, just reload.
-    else if (this.state === 'running' && this.config.failOnExceptions) {
-      this.failTest(message, stack.join('\n'))
-      this.reload()
-    } else if (this.state == 'hotReload') this.reload()
   }
 
   async kill({ skipCDP } = {}) {
@@ -648,14 +646,13 @@ export default class ChromeWrapper {
     manifest?: FileManifest
   }): Promise<ChromeTab> {
     const { url, id, config, manifest } = tabConfig
+
+    // Store config for potential tab reset (used in single-tab mode)
+    // Note: In multi-tab mode (local workers), callers manage their own tabs
     this.tabConfig = tabConfig
 
     // TODO: kill on fail
     if (!this.browser) throw new Error('Browser not setup')
-    if (this.tab)
-      throw new Error(
-        'Tab already exists. Close existing tab before opening new one.'
-      )
 
     const browser = await this.browser
     const page = await browser.newPage()
@@ -679,6 +676,8 @@ export default class ChromeWrapper {
 
     await tab.setupExposedFunctions()
 
+    // Store reference for single-tab mode operations (runTest, closeTab, resetTab)
+    // In multi-tab mode, callers store their own tab references
     this.tab = tab
 
     let navigateUrl = url
