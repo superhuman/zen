@@ -1,3 +1,6 @@
+# 2026-04-01 0.5.6
+- Update Zen to use Webpack v5
+
 # 2025-07-28 0.5.5
 
 - Fixup logging
